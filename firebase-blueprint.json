@@ -1,0 +1,158 @@
+{
+  "entities": {
+    "Department": {
+      "title": "Department",
+      "description": "Police Commission department or workflow process",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "name": { "type": "string", "maxLength": 200 },
+        "code": { "type": "string", "maxLength": 50 },
+        "icon": { "type": "string", "maxLength": 50 },
+        "roomNumber": { "type": "string", "maxLength": 50 },
+        "active": { "type": "boolean" },
+        "order": { "type": "number" }
+      },
+      "required": ["id", "name", "code", "active"]
+    },
+    "Staff": {
+      "title": "Staff",
+      "description": "Police officer or commission staff member registered in the system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "badgeNumber": { "type": "string", "maxLength": 100 },
+        "fullName": { "type": "string", "maxLength": 150 },
+        "rank": { "type": "string", "maxLength": 100 },
+        "departmentId": { "type": "string", "maxLength": 100 },
+        "departmentName": { "type": "string", "maxLength": 200 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["on_duty", "off_duty"] },
+        "lastCheckIn": { "type": "string", "maxLength": 50 },
+        "lastCheckOut": { "type": "string", "maxLength": 50 },
+        "active": { "type": "boolean" }
+      },
+      "required": ["id", "badgeNumber", "fullName", "rank", "departmentId", "departmentName", "status"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Daily staff check-in and check-out attendance record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "staffId": { "type": "string", "maxLength": 100 },
+        "staffName": { "type": "string", "maxLength": 150 },
+        "badgeNumber": { "type": "string", "maxLength": 100 },
+        "rank": { "type": "string", "maxLength": 100 },
+        "departmentId": { "type": "string", "maxLength": 100 },
+        "departmentName": { "type": "string", "maxLength": 200 },
+        "date": { "type": "string", "maxLength": 30 },
+        "month": { "type": "string", "maxLength": 30 },
+        "checkInTime": { "type": "string", "maxLength": 30 },
+        "checkOutTime": { "type": "string", "maxLength": 30 },
+        "punctualityCheckIn": { "type": "string", "enum": ["high", "low"] },
+        "punctualityCheckOut": { "type": "string", "enum": ["very_high", "low", "pending"] },
+        "timestamp": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "staffId", "staffName", "badgeNumber", "departmentId", "date", "checkInTime", "punctualityCheckIn"]
+    },
+    "Visitor": {
+      "title": "Visitor",
+      "description": "Citizen/Visitor (ባለጉዳይ) registered using Fayda Digital ID",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "faydaId": { "type": "string", "maxLength": 100 },
+        "fullName": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "departmentId": { "type": "string", "maxLength": 100 },
+        "departmentName": { "type": "string", "maxLength": 200 },
+        "purpose": { "type": "string", "maxLength": 250 },
+        "checkInTime": { "type": "string", "maxLength": 50 },
+        "checkOutTime": { "type": "string", "maxLength": 50 },
+        "date": { "type": "string", "maxLength": 30 },
+        "status": { "type": "string", "enum": ["active", "completed"] },
+        "rating": { "type": "number" },
+        "ratingText": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "faydaId", "fullName", "departmentId", "departmentName", "checkInTime", "status", "date"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "Visitor satisfaction rating record per department",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "visitorLogId": { "type": "string", "maxLength": 100 },
+        "faydaId": { "type": "string", "maxLength": 100 },
+        "departmentId": { "type": "string", "maxLength": 100 },
+        "departmentName": { "type": "string", "maxLength": 200 },
+        "score": { "type": "number" },
+        "label": { "type": "string", "maxLength": 100 },
+        "timestamp": { "type": "string", "maxLength": 50 },
+        "date": { "type": "string", "maxLength": 30 }
+      },
+      "required": ["id", "visitorLogId", "faydaId", "departmentId", "score", "label", "timestamp"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Commission notice broadcasted by admin across kiosk screens",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "title": { "type": "string", "maxLength": 200 },
+        "message": { "type": "string", "maxLength": 1000 },
+        "priority": { "type": "string", "enum": ["normal", "urgent", "broadcast"] },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "title", "message", "priority", "active", "createdAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Police commission branding, logos, motto, and work hours configuration",
+      "type": "object",
+      "properties": {
+        "commissionName": { "type": "string", "maxLength": 200 },
+        "logoUrl": { "type": "string", "maxLength": 500 },
+        "flagUrl": { "type": "string", "maxLength": 500 },
+        "motto": { "type": "string", "maxLength": 300 },
+        "morningStart": { "type": "string", "maxLength": 20 },
+        "morningDeadline": { "type": "string", "maxLength": 20 },
+        "eveningExitTime": { "type": "string", "maxLength": 20 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["commissionName", "motto"]
+    }
+  },
+  "firestore": {
+    "/departments/{departmentId}": {
+      "schema": { "$ref": "#/entities/Department" },
+      "description": "Police commission departments list"
+    },
+    "/staff/{staffId}": {
+      "schema": { "$ref": "#/entities/Staff" },
+      "description": "Police officers and commission staff records"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": { "$ref": "#/entities/Attendance" },
+      "description": "Staff daily attendance check-in and check-out logs"
+    },
+    "/visitors/{visitorId}": {
+      "schema": { "$ref": "#/entities/Visitor" },
+      "description": "Fayda digital ID visitor check-in and exit records"
+    },
+    "/feedbacks/{feedbackId}": {
+      "schema": { "$ref": "#/entities/Feedback" },
+      "description": "Service satisfaction feedback given by visitors upon exit"
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "Admin announcements and notices broadcast to screens"
+    },
+    "/settings/{settingsId}": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "Commission settings, logos, and configuration"
+    }
+  }
+}

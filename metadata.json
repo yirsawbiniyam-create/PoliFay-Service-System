@@ -1,0 +1,6 @@
+{
+  "name": "የፖሊስ እና የፋይዳ ዲጂታል መስተንግዶ ሲስተም",
+  "description": "የኢትዮጵያ ፖሊስ ኮሚሽን የሰራተኞች ዲጂታል መታወቂያ መግቢያ/መውጫ ክትትል፣ የፋይዳ ባለጉዳይ ምዝገባ፣ የአገልግሎት እርካታ አስተያየት እና የክፍሎች አፈጻጸም መገምገሚያ ሲስተም።",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
