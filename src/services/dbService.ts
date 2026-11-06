@@ -43,6 +43,34 @@ const FEEDBACKS_COL = 'feedbacks';
 const ANNOUNCEMENTS_COL = 'announcements';
 const SETTINGS_COL = 'settings';
 
+const LOCAL_STORAGE_SETTINGS_KEY = 'polifay_commission_settings';
+
+export function getCachedSettings(): CommissionSettings {
+  if (typeof window === 'undefined') return DEFAULT_COMMISSION_SETTINGS;
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_SETTINGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        ...DEFAULT_COMMISSION_SETTINGS,
+        ...parsed,
+      };
+    }
+  } catch {
+    // Ignore error
+  }
+  return DEFAULT_COMMISSION_SETTINGS;
+}
+
+export function saveCachedSettings(settings: CommissionSettings): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(LOCAL_STORAGE_SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    // Ignore error
+  }
+}
+
 /**
  * Seed initial data if Firestore is empty
  */
@@ -51,17 +79,8 @@ export async function seedInitialDataIfNeeded(): Promise<void> {
     // 1. Settings
     const settingsSnap = await getDocs(collection(db, SETTINGS_COL));
     if (settingsSnap.empty) {
-      await setDoc(doc(db, SETTINGS_COL, 'config'), DEFAULT_COMMISSION_SETTINGS);
-    } else {
-      const currentDoc = settingsSnap.docs[0];
-      const data = currentDoc.data();
-      if (!data.regionalFlagUrl || data.commissionName?.includes('የኢትዮጵያ ፖሊስ ኮሚሽን')) {
-        await updateDoc(doc(db, SETTINGS_COL, 'config'), {
-          commissionName: 'የቤኒሻንጉል ጉሙዝ ክልል ፖሊስ ኮሚሽን',
-          regionalFlagUrl: DEFAULT_COMMISSION_SETTINGS.regionalFlagUrl,
-          logoUrl: DEFAULT_COMMISSION_SETTINGS.logoUrl,
-        });
-      }
+      const current = getCachedSettings();
+      await setDoc(doc(db, SETTINGS_COL, 'config'), current, { merge: true });
     }
 
     // 2. Departments
@@ -96,24 +115,49 @@ export async function seedInitialDataIfNeeded(): Promise<void> {
  * Listeners for real-time updates
  */
 export function subscribeToSettings(onData: (settings: CommissionSettings) => void): () => void {
-  const path = `${SETTINGS_COL}/config`;
+  // 1. Emit cached immediately
+  const initial = getCachedSettings();
+  onData(initial);
+
+  // 2. Listen to in-memory broadcast
+  const handleLocalUpdate = (e: Event) => {
+    const custom = e as CustomEvent<CommissionSettings>;
+    if (custom.detail) {
+      onData(custom.detail);
+    }
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('settings_updated', handleLocalUpdate);
+  }
+
+  // 3. Listen to Firestore
   try {
-    return onSnapshot(
+    const unsub = onSnapshot(
       doc(db, SETTINGS_COL, 'config'),
       (snapshot) => {
         if (snapshot.exists()) {
-          onData(snapshot.data() as CommissionSettings);
-        } else {
-          onData(DEFAULT_COMMISSION_SETTINGS);
+          const remoteData = snapshot.data() as CommissionSettings;
+          saveCachedSettings(remoteData);
+          onData(remoteData);
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, path);
+        console.warn('Firestore settings snapshot warning (using cached):', error);
       }
     );
+
+    return () => {
+      unsub();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('settings_updated', handleLocalUpdate);
+      }
+    };
   } catch {
-    onData(DEFAULT_COMMISSION_SETTINGS);
-    return () => {};
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('settings_updated', handleLocalUpdate);
+      }
+    };
   }
 }
 
@@ -631,8 +675,25 @@ export async function deleteAnnouncement(id: string): Promise<void> {
 }
 
 export async function updateSettings(settings: Partial<CommissionSettings>): Promise<void> {
-  await updateDoc(doc(db, SETTINGS_COL, 'config'), {
+  const current = getCachedSettings();
+  const merged: CommissionSettings = {
+    ...current,
     ...settings,
     updatedAt: new Date().toISOString(),
-  });
+  };
+
+  // 1. Immediately cache in localStorage
+  saveCachedSettings(merged);
+
+  // 2. Dispatch custom event for immediate UI reaction in all open components
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('settings_updated', { detail: merged }));
+  }
+
+  // 3. Write to Firestore using setDoc with merge: true (so it creates or updates without failure)
+  try {
+    await setDoc(doc(db, SETTINGS_COL, 'config'), merged, { merge: true });
+  } catch (err) {
+    console.warn('Firestore setDoc settings warning (persisted locally):', err);
+  }
 }

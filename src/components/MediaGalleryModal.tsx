@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Image as ImageIcon,
   Flag,
@@ -44,26 +44,82 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
     settings.regionalFlagUrl || BENISHANGUL_GUMUZ_FLAG_SVG
   );
   const [customUrl, setCustomUrl] = useState('');
-  const [customType, setCustomType] = useState<'logo' | 'flag'>('logo');
+  const [customType, setCustomType] = useState<'logo' | 'flag' | 'regionalFlag'>('logo');
   const [isApplying, setIsApplying] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Sync state whenever modal opens or settings change
+  useEffect(() => {
+    if (isOpen && settings) {
+      if (settings.logoUrl) setSelectedLogo(settings.logoUrl);
+      if (settings.flagUrl) setSelectedFlag(settings.flagUrl);
+      if (settings.regionalFlagUrl) {
+        setSelectedRegionalFlag(settings.regionalFlagUrl);
+      } else {
+        setSelectedRegionalFlag(BENISHANGUL_GUMUZ_FLAG_SVG);
+      }
+    }
+  }, [isOpen, settings]);
+
   if (!isOpen) return null;
 
-  // Handle local file upload
+  // Handle local file upload with canvas auto-compression to avoid Firestore 1MB doc limits
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (uploadEvent) => {
-      const dataUrl = uploadEvent.target?.result as string;
-      if (customType === 'logo') {
-        setSelectedLogo(dataUrl);
-      } else {
-        setSelectedFlag(dataUrl);
-      }
-      setSuccessMessage('ምስሉ በተሳካ ሁኔታ ተጭኗል! ከታች ያለውን "አስቀምጥ" ቁልፍ ይጫኑ።');
+      const rawDataUrl = uploadEvent.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 400;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL(
+            file.type === 'image/png' ? 'image/png' : 'image/jpeg',
+            0.88
+          );
+          if (customType === 'logo') {
+            setSelectedLogo(compressedDataUrl);
+          } else if (customType === 'regionalFlag') {
+            setSelectedRegionalFlag(compressedDataUrl);
+          } else {
+            setSelectedFlag(compressedDataUrl);
+          }
+          setSuccessMessage('ምስሉ በተሳካ ሁኔታ ተጭኗል! ከታች ያለውን "በሁሉም ላይ እንዲታይ አስቀምጥ" ቁልፍ ይጫኑ።');
+          return;
+        }
+
+        if (customType === 'logo') {
+          setSelectedLogo(rawDataUrl);
+        } else if (customType === 'regionalFlag') {
+          setSelectedRegionalFlag(rawDataUrl);
+        } else {
+          setSelectedFlag(rawDataUrl);
+        }
+        setSuccessMessage('ምስሉ በተሳካ ሁኔታ ተጭኗል!');
+      };
+      img.src = rawDataUrl;
     };
     reader.readAsDataURL(file);
   };
@@ -72,6 +128,8 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
     setIsApplying(true);
     try {
       await updateSettings({
+        commissionName: settings.commissionName,
+        motto: settings.motto,
         logoUrl: selectedLogo,
         flagUrl: selectedFlag,
         regionalFlagUrl: selectedRegionalFlag,
@@ -86,6 +144,13 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
     } finally {
       setIsApplying(false);
     }
+  };
+
+  const handleSelectDefaultPair = () => {
+    setSelectedLogo(BENISHANGUL_GUMUZ_POLICE_LOGO_SVG);
+    setSelectedFlag(ETHIOPIAN_FLAG_SVG);
+    setSelectedRegionalFlag(BENISHANGUL_GUMUZ_FLAG_SVG);
+    setSuccessMessage('የቤኒሻንጉል ጉሙዝ ይፋዊ ሎጎ እና ሁለቱም ሰንደቆች ተመርጠዋል!');
   };
 
   return (
@@ -107,19 +172,28 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSelectDefaultPair}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all cursor-pointer"
+            >
+              <Award className="w-3.5 h-3.5" />
+              <span>ይፋዊ የቤ/ጉሙዝ አርማና ሰንደቆች አዘጋጅ</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Switcher */}
         <div className="flex items-center gap-2 mb-4 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 shrink-0">
           <button
             onClick={() => setActiveTab('logos')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
               activeTab === 'logos'
                 ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-md font-black'
                 : 'text-slate-400 hover:text-white'
@@ -131,7 +205,7 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
 
           <button
             onClick={() => setActiveTab('flags')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
               activeTab === 'flags'
                 ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-md font-black'
                 : 'text-slate-400 hover:text-white'
@@ -143,7 +217,7 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
 
           <button
             onClick={() => setActiveTab('upload')}
-            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
               activeTab === 'upload'
                 ? 'bg-amber-500 text-slate-950 shadow-md font-black'
                 : 'text-slate-400 hover:text-white'
@@ -231,22 +305,40 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                 </span>
               </div>
 
+              {/* Quick pair setup button */}
+              <div className="bg-slate-950 border border-slate-800 p-3 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    የተሟላ የሁለቱም ሰንደቆች ጥምረት
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    የኢትዮጵያ ሰንደቅ እና የቤኒሻንጉል ጉሙዝ ክልል ሰንደቅ ጎን ለጎን
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedFlag(ETHIOPIAN_FLAG_SVG);
+                    setSelectedRegionalFlag(BENISHANGUL_GUMUZ_FLAG_SVG);
+                    setSuccessMessage('የኢትዮጵያ እና የቤኒሻንጉል ጉሙዝ ሰንደቅ ዓላማዎች ተመርጠዋል!');
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-bold text-xs hover:from-amber-400 hover:to-amber-500 cursor-pointer shadow"
+                >
+                  ሁለቱንም በአንድ ላይ ምረጥ
+                </button>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 {FLAG_GALLERY_PRESETS.map((item) => {
-                  const isSelected = selectedFlag === item.url || selectedRegionalFlag === item.url;
+                  const isNationalSelected = selectedFlag === item.url;
+                  const isRegionalSelected = selectedRegionalFlag === item.url;
+                  const isAnySelected = isNationalSelected || isRegionalSelected;
+
                   return (
                     <div
                       key={item.id}
-                      onClick={() => {
-                        if (item.id === 'bg_regional_flag') {
-                          setSelectedRegionalFlag(item.url);
-                          setSelectedFlag(item.url);
-                        } else {
-                          setSelectedFlag(item.url);
-                        }
-                      }}
-                      className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                        isSelected
+                      className={`p-4 rounded-2xl border-2 transition-all flex flex-col justify-between ${
+                        isAnySelected
                           ? 'border-amber-400 bg-amber-500/10 shadow-xl shadow-amber-500/10'
                           : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
                       }`}
@@ -265,9 +357,9 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                           <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">
                             {item.category}
                           </span>
-                          {isSelected && (
+                          {isAnySelected && (
                             <span className="text-[10px] font-black text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40">
-                              ✓ ተመርጧል
+                              ✓ {isRegionalSelected ? 'ቤ/ጉሙዝ' : 'ኢትዮጵያ'}
                             </span>
                           )}
                         </div>
@@ -280,10 +372,50 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                         </p>
                       </div>
 
-                      <div className="mt-3 pt-2 border-t border-slate-800/80">
-                        <span className="text-[11px] text-amber-300 font-semibold">
-                          ይምረጡ ➔
-                        </span>
+                      <div className="mt-3 pt-2 border-t border-slate-800/80 flex flex-col gap-1.5">
+                        {item.id === 'bg_regional_flag' ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedRegionalFlag(item.url);
+                              setSuccessMessage('የቤኒሻንጉል ጉሙዝ ክልል ሰንደቅ ተመርጧል!');
+                            }}
+                            className={`w-full py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              isRegionalSelected
+                                ? 'bg-amber-500 text-slate-950 font-black'
+                                : 'bg-slate-800 hover:bg-slate-700 text-amber-300'
+                            }`}
+                          >
+                            {isRegionalSelected ? '✓ የቤ/ጉሙዝ ሰንደቅ ሆኗል' : 'እንደ ቤኒሻንጉል ጉሙዝ ሰንደቅ ምረጥ'}
+                          </button>
+                        ) : item.id === 'eth_national_flag' ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedFlag(item.url);
+                              setSuccessMessage('የኢትዮጵያ ብሔራዊ ሰንደቅ ተመርጧል!');
+                            }}
+                            className={`w-full py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              isNationalSelected
+                                ? 'bg-amber-500 text-slate-950 font-black'
+                                : 'bg-slate-800 hover:bg-slate-700 text-amber-300'
+                            }`}
+                          >
+                            {isNationalSelected ? '✓ የኢትዮጵያ ሰንደቅ ሆኗል' : 'እንደ ኢትዮጵያ ሰንደቅ ምረጥ'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedFlag(item.url);
+                              setSelectedRegionalFlag(BENISHANGUL_GUMUZ_FLAG_SVG);
+                              setSuccessMessage('ጥምር ሰንደቆች ተመርጠዋል!');
+                            }}
+                            className="w-full py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 cursor-pointer"
+                          >
+                            እንደ ዋና ባነር ምረጥ
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -299,14 +431,14 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                 <span className="text-xs font-bold text-slate-300 block mb-2">
                   የትኛውን ማስተካከል ይፈልጋሉ?
                 </span>
-                <div className="flex gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <button
                     type="button"
                     onClick={() => setCustomType('logo')}
-                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border transition-colors ${
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                       customType === 'logo'
                         ? 'bg-amber-500 text-slate-950 border-amber-500'
-                        : 'bg-slate-900 text-slate-300 border-slate-700'
+                        : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-600'
                     }`}
                   >
                     የኮሚሽን ሎጎ
@@ -314,13 +446,24 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setCustomType('flag')}
-                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border transition-colors ${
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                       customType === 'flag'
                         ? 'bg-amber-500 text-slate-950 border-amber-500'
-                        : 'bg-slate-900 text-slate-300 border-slate-700'
+                        : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-600'
                     }`}
                   >
-                    ሰንደቅ ዓላማ
+                    የኢትዮጵያ ሰንደቅ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomType('regionalFlag')}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                      customType === 'regionalFlag'
+                        ? 'bg-amber-500 text-slate-950 border-amber-500'
+                        : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-600'
+                    }`}
+                  >
+                    የቤኒሻንጉል ጉሙዝ ሰንደቅ
                   </button>
                 </div>
               </div>
@@ -364,14 +507,17 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                     type="button"
                     onClick={() => {
                       if (!customUrl.trim()) return;
+                      const val = customUrl.trim();
                       if (customType === 'logo') {
-                        setSelectedLogo(customUrl.trim());
+                        setSelectedLogo(val);
+                      } else if (customType === 'regionalFlag') {
+                        setSelectedRegionalFlag(val);
                       } else {
-                        setSelectedFlag(customUrl.trim());
+                        setSelectedFlag(val);
                       }
                       setSuccessMessage('ማስፈንጠሪያው ተቀባይነት አግኝቷል!');
                     }}
-                    className="bg-slate-800 hover:bg-slate-700 text-amber-400 px-4 py-2 rounded-xl text-xs font-bold"
+                    className="bg-slate-800 hover:bg-slate-700 text-amber-400 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
                   >
                     ተግብር
                   </button>
@@ -383,7 +529,7 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
 
         {/* Selected Previews & Footer Actions */}
         <div className="border-t border-slate-800 pt-4 mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <span className="text-xs text-slate-400">የአሁን ምርጫ:</span>
             {/* Logo thumbnail */}
             <div className="flex items-center gap-2 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-800">
@@ -395,28 +541,38 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
               <span className="text-[11px] font-bold text-amber-300">አርማ</span>
             </div>
 
-            {/* Flag thumbnail */}
+            {/* Ethiopian Flag thumbnail */}
             <div className="flex items-center gap-2 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-800">
               <img
                 src={selectedFlag}
-                alt="Selected Flag"
-                className="w-8 h-5 object-contain rounded"
+                alt="Selected National Flag"
+                className="w-7 h-4 object-contain rounded"
               />
-              <span className="text-[11px] font-bold text-emerald-300">ሰንደቅ</span>
+              <span className="text-[11px] font-bold text-emerald-300">ኢትዮጵያ</span>
+            </div>
+
+            {/* Benishangul-Gumuz Flag thumbnail */}
+            <div className="flex items-center gap-2 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-800">
+              <img
+                src={selectedRegionalFlag}
+                alt="Selected Regional Flag"
+                className="w-7 h-4 object-contain rounded"
+              />
+              <span className="text-[11px] font-bold text-yellow-300">ቤ/ጉሙዝ</span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
             >
               ይቅር (Cancel)
             </button>
             <button
               onClick={handleApplySettings}
               disabled={isApplying}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-lg transition-transform active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-lg transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{isApplying ? 'በማስቀመጥ ላይ...' : 'በሁሉም ላይ እንዲታይ አስቀምጥ'}</span>

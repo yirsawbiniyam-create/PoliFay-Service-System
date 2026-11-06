@@ -19,6 +19,9 @@ import {
   ThumbsUp,
   Award,
   RefreshCw,
+  Volume2,
+  VolumeX,
+  Zap,
 } from 'lucide-react';
 import { Department, Staff, VisitorRecord, CommissionSettings } from '../types';
 import {
@@ -63,6 +66,11 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
   const [manualInput, setManualInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Card detection flash and audio notice states
+  const [isCardDetected, setIsCardDetected] = useState(false);
+  const [audioNotice, setAudioNotice] = useState(false);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+
   // Results for modals
   const [staffResult, setStaffResult] = useState<StaffScanResult | null>(null);
   const [visitorResult, setVisitorResult] = useState<VisitorScanResult | null>(null);
@@ -70,13 +78,41 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
   const [selectedScore, setSelectedScore] = useState<number | null>(null);
   const [selectedScoreLabel, setSelectedScoreLabel] = useState<string>('');
 
-  // Camera video & canvas
+  // Camera video, canvas & media stream
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const animFrameId = useRef<number | null>(null);
   const isScanningRef = useRef(false);
+  const lastScannedCodeRef = useRef<string>('');
+  const lastScanTimestampRef = useRef<number>(0);
+
+  // Native BarcodeDetector instance if supported in browser
+  const barcodeDetectorRef = useRef<any>(null);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        const BD = (window as any).BarcodeDetector;
+        barcodeDetectorRef.current = new BD({
+          formats: [
+            'qr_code',
+            'code_128',
+            'code_39',
+            'ean_13',
+            'ean_8',
+            'upc_a',
+            'upc_e',
+            'pdf417',
+            'data_matrix',
+          ],
+        });
+      } catch (e) {
+        console.warn('BarcodeDetector initialization fallback:', e);
+      }
+    }
+  }, []);
 
   // Time state
   const [ethTime, setEthTime] = useState(toEthiopianTime());
@@ -106,9 +142,25 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
       const trimmed = code.trim();
       if (!trimmed) return;
 
+      // Throttle exact duplicate scans within 2.5 seconds
+      const now = Date.now();
+      if (
+        trimmed === lastScannedCodeRef.current &&
+        now - lastScanTimestampRef.current < 2500
+      ) {
+        return;
+      }
+      lastScannedCodeRef.current = trimmed;
+      lastScanTimestampRef.current = now;
+
+      // Trigger detection sound and visual neon-green indicator
+      soundEffects.unlockAudio();
+      soundEffects.playScanBeep();
+      setIsCardDetected(true);
+      setTimeout(() => setIsCardDetected(false), 500);
+
       setIsProcessing(true);
       setErrorMessage(null);
-      soundEffects.playScanBeep();
 
       try {
         // 1. Check if it matches a staff member (Police Digital ID)
@@ -129,13 +181,14 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
           );
           setStaffResult(res);
           setViewState('staff_success_modal');
+
           if (res.action === 'check_in') {
             soundEffects.playSuccessChime();
           } else {
             soundEffects.playFarewellChime();
           }
 
-          // Auto-return to scanner after 3.8 seconds as requested
+          // Auto-return to scanner after 3.8 seconds
           setTimeout(() => {
             setViewState('idle_scanning');
             setStaffResult(null);
@@ -206,6 +259,7 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
         }
       } catch (err: unknown) {
         console.error('Scan processing error:', err);
+        soundEffects.playErrorBuzz();
         setErrorMessage(err instanceof Error ? err.message : 'ስካን ሲደረግ ስህተት አጋጥሟል');
         setIsProcessing(false);
       }
@@ -250,25 +304,40 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
   }, [handleBarcodeScanned]);
 
   /**
-   * Camera QR Scanner Loop using jsQR
+   * Camera Stream & Continuous Sensing Loop
    */
-  const startCamera = async () => {
+  const startCamera = async (mode: 'environment' | 'user' = facingMode) => {
     setCameraError(null);
     try {
+      // Stop old tracks if any
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: {
+          facingMode: mode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
       });
+
+      streamRef.current = stream;
+      setCameraActive(true);
+      isScanningRef.current = true;
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute('playsinline', 'true');
-        await videoRef.current.play();
-        setCameraActive(true);
-        isScanningRef.current = true;
-        scanFrame();
+        await videoRef.current.play().catch(() => {});
       }
+
+      // Start frame scanning loop
+      scanFrame();
     } catch (err: unknown) {
-      console.warn('Camera could not be started:', err);
-      setCameraError('ካሜራ መክፈት አልተቻለም። ፍቃድ መኖሩን ያረጋግጡ ወይም የኮድ መፈለጊያውን ይጠቀሙ።');
+      console.warn('Camera could not be started automatically:', err);
+      setCameraError('ካሜራ መክፈት አልተቻለም። እባክዎ የካሜራ ፍቃድ ይስጡ ወይም ከታች ያለውን ቁልፍ ይጫኑ።');
       setCameraActive(false);
     }
   };
@@ -277,51 +346,104 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
     isScanningRef.current = false;
     if (animFrameId.current) {
       cancelAnimationFrame(animFrameId.current);
+      animFrameId.current = null;
     }
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((track) => track.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
     setCameraActive(false);
   };
 
-  const scanFrame = () => {
-    if (!isScanningRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (ctx) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'dontInvert',
-        });
-
-        if (qrCode && qrCode.data) {
-          handleBarcodeScanned(qrCode.data);
-          // Pause scanning temporarily
-          setTimeout(() => {
-            if (isScanningRef.current) {
-              animFrameId.current = requestAnimationFrame(scanFrame);
-            }
-          }, 2000);
-          return;
-        }
-      }
-    }
-    animFrameId.current = requestAnimationFrame(scanFrame);
+  const toggleCameraFacing = async () => {
+    const nextMode = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(nextMode);
+    await startCamera(nextMode);
   };
 
-  // Cleanup camera on unmount
+  /**
+   * Continuous Sensing: Uses native BarcodeDetector API if available,
+   * otherwise uses jsQR canvas scanner.
+   */
+  const scanFrame = async () => {
+    if (!isScanningRef.current) return;
+    const video = videoRef.current;
+
+    if (video && video.readyState === video.HAVE_ENOUGH_DATA && !isProcessing) {
+      let codeFound: string | null = null;
+
+      // 1. Try native BarcodeDetector (fastest, senses linear 1D barcodes and QR)
+      if (barcodeDetectorRef.current) {
+        try {
+          const detected = await barcodeDetectorRef.current.detect(video);
+          if (detected && detected.length > 0 && detected[0].rawValue) {
+            codeFound = detected[0].rawValue;
+          }
+        } catch {
+          // ignore error and proceed to jsQR
+        }
+      }
+
+      // 2. Fallback to jsQR on canvas
+      if (!codeFound && canvasRef.current) {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (ctx) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert',
+          });
+          if (qrCode && qrCode.data) {
+            codeFound = qrCode.data;
+          }
+        }
+      }
+
+      // If a code is sensed:
+      if (codeFound) {
+        handleBarcodeScanned(codeFound);
+        // Pause scanning frame loop temporarily
+        setTimeout(() => {
+          if (isScanningRef.current) {
+            animFrameId.current = requestAnimationFrame(scanFrame);
+          }
+        }, 1500);
+        return;
+      }
+    }
+
+    if (isScanningRef.current) {
+      animFrameId.current = requestAnimationFrame(scanFrame);
+    }
+  };
+
+  // Auto-start camera on initial mount
   useEffect(() => {
+    startCamera();
     return () => {
       stopCamera();
     };
   }, []);
+
+  // When returning to 'idle_scanning', reconnect camera stream and resume sensing
+  useEffect(() => {
+    if (viewState === 'idle_scanning') {
+      if (streamRef.current && videoRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+        videoRef.current.play().catch(() => {});
+        isScanningRef.current = true;
+        scanFrame();
+      } else {
+        startCamera();
+      }
+    }
+  }, [viewState]);
 
   /**
    * Visitor Rating Submission
@@ -335,6 +457,7 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
     if (!activeFeedbackVisitor) return;
     setSelectedScore(score);
     setSelectedScoreLabel(label);
+    soundEffects.unlockAudio();
     soundEffects.playSuccessChime();
 
     try {
@@ -353,6 +476,7 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
       setViewState('idle_scanning');
     }
   };
+
 
   return (
     <div className="min-h-[calc(100vh-130px)] bg-slate-950 text-white p-3 sm:p-6 flex flex-col justify-between">
@@ -383,8 +507,8 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
           </div>
 
           {/* Time & Touchless Scanner status */}
-          <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
-            <div className="text-right">
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+            <div className="text-right hidden sm:block">
               <div className="text-sm font-extrabold text-amber-400 flex items-center gap-1.5 justify-end">
                 <Clock className="w-4 h-4" />
                 <span>{ethTime.formatted}</span>
@@ -392,28 +516,58 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
               <span className="text-[11px] text-slate-400">ያለ ንኪኪ ስካነር ዝግጁ ነው</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={cameraActive ? stopCamera : startCamera}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-bold text-xs transition-all shadow-md ${
-                  cameraActive
-                    ? 'bg-rose-600/90 hover:bg-rose-700 text-white'
-                    : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                }`}
-              >
-                {cameraActive ? (
-                  <>
-                    <CameraOff className="w-3.5 h-3.5" />
-                    <span>ካሜራ ዝጋ</span>
-                  </>
-                ) : (
-                  <>
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>ካሜራ ክፈት</span>
-                  </>
-                )}
-              </button>
-            </div>
+            {/* Audio Test Button */}
+            <button
+              type="button"
+              onClick={() => {
+                soundEffects.unlockAudio();
+                soundEffects.playScanBeep();
+                setTimeout(() => soundEffects.playSuccessChime(), 140);
+                setAudioNotice(true);
+                setTimeout(() => setAudioNotice(false), 2600);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 font-bold text-xs transition-all shadow-md cursor-pointer"
+              title="የስካነሩን የማረጋገጫ ድምፅ ይሞክሩ"
+            >
+              <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>{audioNotice ? '🔊 ድምፅ እየሰራ ነው!' : 'ድምፅ ሞክር (Test Sound)'}</span>
+            </button>
+
+            {/* Camera Switch (Front/Back) */}
+            <button
+              type="button"
+              onClick={toggleCameraFacing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 font-bold text-xs transition-all cursor-pointer"
+              title="የፊት ወይም የጀርባ ካሜራ ቀይር"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden md:inline">
+                {facingMode === 'environment' ? 'የፊት ካሜራ' : 'የጀርባ ካሜራ'}
+              </span>
+            </button>
+
+            {/* Camera Start / Stop */}
+            <button
+              type="button"
+              onClick={cameraActive ? stopCamera : () => startCamera()}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-bold text-xs transition-all shadow-md cursor-pointer ${
+                cameraActive
+                  ? 'bg-rose-600/90 hover:bg-rose-700 text-white'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+              }`}
+            >
+              {cameraActive ? (
+                <>
+                  <CameraOff className="w-3.5 h-3.5" />
+                  <span>ካሜራ ዝጋ</span>
+                </>
+              ) : (
+                <>
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>ካሜራ ክፈት</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
@@ -425,7 +579,7 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
             </div>
             <button
               onClick={() => setErrorMessage(null)}
-              className="text-xs bg-rose-900/60 hover:bg-rose-800 px-2 py-1 rounded"
+              className="text-xs bg-rose-900/60 hover:bg-rose-800 px-2 py-1 rounded cursor-pointer"
             >
               አጥፋ
             </button>
@@ -434,20 +588,57 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
       </div>
 
       {/* Main Kiosk Center Container */}
-      <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col items-center justify-center relative">
+      <div
+        className="max-w-4xl mx-auto w-full flex-1 flex flex-col items-center justify-center relative"
+        onClick={() => soundEffects.unlockAudio()}
+      >
         {/* VIEW 1: Idle Scanning State */}
         {viewState === 'idle_scanning' && (
           <div className="w-full flex flex-col items-center">
             {/* Live Camera Viewport or Animated Touchless Target */}
-            <div className="relative w-full max-w-lg aspect-4/3 sm:aspect-16/10 rounded-3xl overflow-hidden border-2 border-amber-500/50 bg-slate-900/90 shadow-2xl shadow-amber-500/10 flex flex-col items-center justify-center">
+            <div
+              className={`relative w-full max-w-lg aspect-4/3 sm:aspect-16/10 rounded-3xl overflow-hidden bg-slate-900/90 shadow-2xl transition-all duration-300 flex flex-col items-center justify-center ${
+                isCardDetected
+                  ? 'border-4 border-emerald-400 shadow-[0_0_40px_#10b981]'
+                  : 'border-2 border-amber-500/50 shadow-amber-500/10'
+              }`}
+            >
               {/* Corner Targets */}
-              <div className="absolute top-4 left-4 w-9 h-9 border-t-4 border-l-4 border-amber-400 rounded-tl-xl pointer-events-none"></div>
-              <div className="absolute top-4 right-4 w-9 h-9 border-t-4 border-r-4 border-amber-400 rounded-tr-xl pointer-events-none"></div>
-              <div className="absolute bottom-4 left-4 w-9 h-9 border-b-4 border-l-4 border-amber-400 rounded-bl-xl pointer-events-none"></div>
-              <div className="absolute bottom-4 right-4 w-9 h-9 border-b-4 border-r-4 border-amber-400 rounded-br-xl pointer-events-none"></div>
+              <div
+                className={`absolute top-4 left-4 w-9 h-9 border-t-4 border-l-4 rounded-tl-xl pointer-events-none transition-colors ${
+                  isCardDetected ? 'border-emerald-400' : 'border-amber-400'
+                }`}
+              ></div>
+              <div
+                className={`absolute top-4 right-4 w-9 h-9 border-t-4 border-r-4 rounded-tr-xl pointer-events-none transition-colors ${
+                  isCardDetected ? 'border-emerald-400' : 'border-amber-400'
+                }`}
+              ></div>
+              <div
+                className={`absolute bottom-4 left-4 w-9 h-9 border-b-4 border-l-4 rounded-bl-xl pointer-events-none transition-colors ${
+                  isCardDetected ? 'border-emerald-400' : 'border-amber-400'
+                }`}
+              ></div>
+              <div
+                className={`absolute bottom-4 right-4 w-9 h-9 border-b-4 border-r-4 rounded-br-xl pointer-events-none transition-colors ${
+                  isCardDetected ? 'border-emerald-400' : 'border-amber-400'
+                }`}
+              ></div>
 
               {/* Animated Laser Scanning Line */}
-              <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-amber-400 to-transparent shadow-[0_0_15px_#f59e0b] animate-[bounce_2.8s_infinite] pointer-events-none z-10 opacity-90"></div>
+              <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-amber-400 to-transparent shadow-[0_0_18px_#f59e0b] animate-[bounce_2.4s_infinite] pointer-events-none z-10 opacity-90"></div>
+
+              {/* Visual Card Sensed Checkmark Flash Overlay */}
+              {isCardDetected && (
+                <div className="absolute inset-0 bg-emerald-500/25 z-20 flex flex-col items-center justify-center animate-in zoom-in duration-150 backdrop-blur-[1px]">
+                  <div className="w-20 h-20 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shadow-2xl animate-bounce">
+                    <CheckCircle2 className="w-12 h-12 stroke-[2.5]" />
+                  </div>
+                  <span className="text-white font-black text-lg mt-2 bg-slate-950/80 px-4 py-1 rounded-full border border-emerald-400">
+                    መታወቂያው ተቀባይነት አግኝቷል!
+                  </span>
+                </div>
+              )}
 
               {cameraActive ? (
                 <div className="relative w-full h-full">
@@ -459,9 +650,28 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
                     playsInline
                   />
                   <canvas ref={canvasRef} className="hidden" />
-                  <div className="absolute bottom-3 inset-x-0 text-center">
-                    <span className="bg-slate-950/80 text-amber-300 text-xs px-3 py-1 rounded-full border border-amber-500/30">
-                      የፖሊስ ወይም የፋይዳ መታወቂያዎን በካሜራው ፊት ያሳዩ
+
+                  {/* Active Sensor Status Header Pill */}
+                  <div className="absolute top-3 inset-x-0 flex justify-center pointer-events-none">
+                    <div className="bg-slate-950/85 backdrop-blur-md text-emerald-300 text-xs px-3 py-1 rounded-full border border-emerald-500/40 flex items-center gap-2 shadow-lg">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                      <span className="font-bold">
+                        ስካነሩ በርቷል (Touchless Sensing) • ድምፅ በርቷል 🔊
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Target Aiming Crosshair */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40">
+                    <div className="w-48 h-32 border border-dashed border-amber-400/80 rounded-2xl flex items-center justify-center">
+                      <Zap className="w-6 h-6 text-amber-400 animate-pulse" />
+                    </div>
+                  </div>
+
+                  {/* Guidance Footer */}
+                  <div className="absolute bottom-3 inset-x-0 text-center pointer-events-none px-4">
+                    <span className="bg-slate-950/90 text-amber-300 text-xs px-3.5 py-1.5 rounded-full border border-amber-500/40 font-semibold shadow-md inline-block max-w-sm">
+                      የፖሊስ ዲጂታል መታወቂያዎን ወይም የፋይዳ ካርድዎን እዚህ ፊት ለፊት ሲያቀርቡ በድምፅ ያረጋግጣል
                     </span>
                   </div>
                 </div>
@@ -477,11 +687,14 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
                     የፖሊስ ዲጂታል መታወቂያዎን የጀርባ ባርኮድ ወይም የፋይዳ ዲጂታል መታወቂያዎን (Fayda QR) በስካነሩ ፊት ያሳዩ
                   </p>
                   <button
-                    onClick={startCamera}
-                    className="mt-4 flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold px-4 py-2 rounded-xl text-sm shadow-lg transition-transform active:scale-95"
+                    onClick={() => {
+                      soundEffects.unlockAudio();
+                      startCamera();
+                    }}
+                    className="mt-4 flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-sm shadow-lg transition-transform active:scale-95 cursor-pointer"
                   >
                     <Camera className="w-4 h-4" />
-                    <span>ካሜራውን አብራ</span>
+                    <span>ካሜራውን ክፈት (Start Camera Sensing)</span>
                   </button>
                   {cameraError && (
                     <p className="text-xs text-rose-400 mt-2 max-w-xs">{cameraError}</p>

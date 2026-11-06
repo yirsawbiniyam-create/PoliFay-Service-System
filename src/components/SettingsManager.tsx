@@ -251,9 +251,13 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ settings, onOp
                 <div
                   key={i}
                   onClick={() => {
-                    setFlagUrl(p.url);
-                    if (p.url.includes('000000') || p.name.includes('ቤኒሻንጉል')) {
+                    if (p.name.includes('ቤኒሻንጉል')) {
                       setRegionalFlagUrl(p.url);
+                    } else if (p.name.includes('ብሔራዊ')) {
+                      setFlagUrl(p.url);
+                    } else {
+                      setFlagUrl(p.url);
+                      setRegionalFlagUrl(BENISHANGUL_GUMUZ_FLAG_SVG);
                     }
                   }}
                   className={`p-3 rounded-xl border flex flex-col justify-between cursor-pointer transition-all ${

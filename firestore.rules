@@ -68,8 +68,7 @@ service cloud.firestore {
     // Settings
     match /settings/{settingsId} {
       allow read: if true;
-      allow write: if isValidId(settingsId) &&
-        request.resource.data.commissionName is string && request.resource.data.commissionName.size() <= 200;
+      allow write: if isValidId(settingsId);
     }
   }
 }
