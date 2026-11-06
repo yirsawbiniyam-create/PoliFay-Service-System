@@ -207,12 +207,37 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
         if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
           try {
             const parsed = JSON.parse(trimmed);
-            faydaId = parsed.fin || parsed.faydaId || parsed.id || trimmed;
-            visitorName = parsed.name || parsed.fullName || '';
-            phone = parsed.phone || '';
+            faydaId =
+              parsed.fin ||
+              parsed.faydaId ||
+              parsed.id ||
+              parsed.nationalId ||
+              parsed.FAN ||
+              trimmed;
+            visitorName =
+              parsed.name ||
+              parsed.fullName ||
+              parsed.amharicName ||
+              (parsed.firstName ? `${parsed.firstName} ${parsed.lastName || ''}`.trim() : '');
+            phone = parsed.phone || parsed.phoneNumber || parsed.mobile || '';
             purpose = parsed.purpose || '';
           } catch {
             // Not json
+          }
+        } else if (trimmed.includes('fayda.et') || trimmed.includes('id.gov.et')) {
+          // If it's a Fayda verification URL, extract ID or FIN
+          try {
+            const urlObj = new URL(trimmed);
+            const finParam =
+              urlObj.searchParams.get('fin') ||
+              urlObj.searchParams.get('id') ||
+              urlObj.searchParams.get('fan') ||
+              urlObj.searchParams.get('uin');
+            if (finParam) {
+              faydaId = finParam;
+            }
+          } catch {
+            // URL parse error fallback
           }
         }
 
@@ -229,7 +254,7 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
         const res = await processVisitorScan(
           {
             faydaId,
-            fullName: visitorName || `ባለጉዳይ (${faydaId.slice(-6)})`,
+            fullName: visitorName || (faydaId.length <= 25 ? `ባለጉዳይ (${faydaId})` : `ባለጉዳይ (${faydaId.substring(0, 16)}...)`),
             phone,
             purpose: purpose || 'ጉዳይ ለማስፈጸም የመጣ ባለጉዳይ',
             departmentId: activeDepartment.id,

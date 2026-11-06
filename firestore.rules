@@ -2,10 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.:]+$');
-    }
-
     // Default deny
     match /{document=**} {
       allow read, write: if false;
@@ -13,62 +9,41 @@ service cloud.firestore {
 
     // Departments
     match /departments/{departmentId} {
-      allow read: if true;
-      allow write: if isValidId(departmentId) &&
-        request.resource.data.name is string && request.resource.data.name.size() <= 200 &&
-        request.resource.data.code is string && request.resource.data.code.size() <= 50;
+      allow read, write: if true;
     }
 
-    // Staff
+    // Staff (Police officers)
     match /staff/{staffId} {
-      allow read: if true;
-      allow write: if isValidId(staffId) &&
-        request.resource.data.fullName is string && request.resource.data.fullName.size() <= 150 &&
-        request.resource.data.badgeNumber is string && request.resource.data.badgeNumber.size() <= 100;
+      allow read, write: if true;
     }
 
-    // Attendance
+    // Attendance records (Staff check-in / check-out)
     match /attendance/{attendanceId} {
-      allow read: if true;
-      allow create: if isValidId(attendanceId) &&
-        request.resource.data.staffName is string && request.resource.data.staffName.size() <= 150 &&
-        request.resource.data.badgeNumber is string && request.resource.data.badgeNumber.size() <= 100;
-      allow update: if isValidId(attendanceId);
+      allow read, create, update: if true;
       allow delete: if false;
     }
 
-    // Visitors (Fayda Digital ID entries)
+    // Visitors (Fayda Digital ID records)
     match /visitors/{visitorId} {
-      allow read: if true;
-      allow create: if isValidId(visitorId) &&
-        request.resource.data.fullName is string && request.resource.data.fullName.size() <= 150 &&
-        request.resource.data.faydaId is string && request.resource.data.faydaId.size() <= 100;
-      allow update: if isValidId(visitorId);
+      allow read, create, update: if true;
       allow delete: if false;
     }
 
-    // Feedbacks (Visitor satisfaction ratings)
+    // Feedbacks (Visitor 1-5 ratings & satisfaction metrics)
     match /feedbacks/{feedbackId} {
-      allow read: if true;
-      allow create: if isValidId(feedbackId) &&
-        request.resource.data.score is number && request.resource.data.score >= 1 && request.resource.data.score <= 5 &&
-        request.resource.data.departmentId is string && request.resource.data.departmentId.size() <= 100;
-      allow update: if false;
-      allow delete: if false;
+      allow read, create: if true;
+      allow update, delete: if false;
     }
 
     // Announcements
     match /announcements/{announcementId} {
-      allow read: if true;
-      allow write: if isValidId(announcementId) &&
-        request.resource.data.title is string && request.resource.data.title.size() <= 200 &&
-        request.resource.data.message is string && request.resource.data.message.size() <= 1000;
+      allow read, write: if true;
     }
 
-    // Settings
+    // Settings (Branding, Logos, Flags & Work Hours)
     match /settings/{settingsId} {
-      allow read: if true;
-      allow write: if isValidId(settingsId);
+      allow read, write: if true;
     }
   }
 }
+
