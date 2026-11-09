@@ -34,6 +34,8 @@ import {
   StaffScanResult,
   VisitorScanResult,
 } from '../services/dbService';
+import { PoliceIdCard } from './PoliceIdCard';
+import { PoliceIdSystemModal } from './PoliceIdSystemModal';
 import { soundEffects } from '../utils/audio';
 import { toEthiopianTime } from '../utils/ethiopianTime';
 import { SAMPLE_FAYDA_CITIZENS } from '../data/initialData';
@@ -81,6 +83,9 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
   // Touchscreen Sensor state
   const [isTouchSensingActive, setIsTouchSensingActive] = useState(false);
   const [touchSensorFeedback, setTouchSensorFeedback] = useState<string | null>(null);
+
+  // Hidden Police ID System Modal state
+  const [isPoliceSystemModalOpen, setIsPoliceSystemModalOpen] = useState(false);
 
   // Results for modals
   const [staffResult, setStaffResult] = useState<StaffScanResult | null>(null);
@@ -198,16 +203,30 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
       setErrorMessage(null);
 
       try {
-        // 1. Check if it matches a staff member (Police Digital ID)
+        // 1. Check if it matches a staff member (Police Digital ID from Benishangul-Gumuz ID System)
         const matchedStaff = staffList.find(
           (s) =>
             s.id.toLowerCase() === trimmed.toLowerCase() ||
+            (s.idNumber && s.idNumber.toLowerCase() === trimmed.toLowerCase()) ||
             s.badgeNumber.toLowerCase() === trimmed.toLowerCase() ||
-            trimmed.toUpperCase().includes(s.badgeNumber.toUpperCase())
+            trimmed.toUpperCase().includes(s.badgeNumber.toUpperCase()) ||
+            (s.idNumber && trimmed.toUpperCase().includes(s.idNumber.toUpperCase()))
         );
 
-        if (matchedStaff || trimmed.toUpperCase().startsWith('POL')) {
-          const badgeToUse = matchedStaff ? matchedStaff.id : trimmed;
+        const isPoliceId =
+          matchedStaff ||
+          trimmed.toUpperCase().startsWith('POL') ||
+          trimmed.toUpperCase().startsWith('BGR-POL') ||
+          trimmed.toUpperCase().includes('BGR-POL') ||
+          trimmed.includes('/verify/');
+
+        if (isPoliceId) {
+          let badgeToUse = matchedStaff ? (matchedStaff.idNumber || matchedStaff.id) : trimmed;
+          if (badgeToUse.includes('/verify/')) {
+            const parts = badgeToUse.split('/verify/');
+            if (parts[1]) badgeToUse = parts[1].split('?')[0].split('#')[0].trim();
+          }
+
           const res = await processStaffScan(
             badgeToUse,
             staffList,
@@ -216,7 +235,7 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
           );
           setStaffResult(res);
           setViewState('staff_success_modal');
-          setCountdown(5);
+          setCountdown(6);
 
           if (res.action === 'check_in') {
             soundEffects.playSuccessChime();
@@ -233,7 +252,7 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
                 setViewState('idle_scanning');
                 setStaffResult(null);
                 setIsProcessing(false);
-                return 5;
+                return 6;
               }
               return prev - 1;
             });
@@ -746,6 +765,17 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
                 </>
               )}
             </button>
+
+            {/* Connected Police Digital ID System (Hidden Modal Trigger) */}
+            <button
+              type="button"
+              onClick={() => setIsPoliceSystemModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 font-bold text-xs transition-all shadow-md cursor-pointer"
+              title="የቤንሻንጉል ጉምዝ ፖሊስ ዲጂታል መታወቂያ ሲስተም ቋት"
+            >
+              <Shield className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">የፖሊስ መታወቂያ ቋት</span>
+            </button>
           </div>
         </div>
 
@@ -1144,112 +1174,111 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
               </div>
             </div>
 
-            {/* Official Police Digital ID Card Frame */}
-            <div className="bg-gradient-to-b from-slate-950 to-slate-900 border-2 border-amber-500/50 rounded-2xl p-5 text-left mb-5 shadow-xl relative overflow-hidden">
-              {/* Official BGRS Police Commission Header */}
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-amber-500/30">
-                <div className="flex items-center gap-2">
-                  <img
-                    src={settings.logoUrl}
-                    alt="Commission Seal"
-                    className="w-10 h-10 object-contain rounded-full bg-slate-950 p-0.5 border border-amber-400/60"
-                  />
-                  <div>
-                    <span className="text-[11px] font-black text-amber-300 block uppercase tracking-wide">
-                      {settings.commissionName || 'የቤኒሻንጉል ጉሙዝ ክልል ፖሊስ ኮሚሽን'}
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      የፖሊስ ዲጂታል መታወቂያ (Police Digital ID)
-                    </span>
-                  </div>
+            {/* The Authentic Police Digital ID Card (Front & Back Interactive View) */}
+            <div className="my-4">
+              <PoliceIdCard staff={staffResult.staff} settings={settings} />
+            </div>
+
+            {/* Comprehensive Police ID System Information Breakdown */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-left mb-5 shadow-xl">
+              <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+                <span className="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-amber-400" />
+                  የፖሊስ ዲጂታል መታወቂያ ሙሉ መረጃ (Accepted Police ID Record)
+                </span>
+                <span className="text-[10px] bg-emerald-950 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-600/40">
+                  ህጋዊ የኮሚሽኑ አባል
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block text-[10px]">መለያ ቁጥር (ID NO):</span>
+                  <span className="font-mono font-bold text-amber-300">
+                    {staffResult.staff.idNumber || staffResult.staff.id}
+                  </span>
                 </div>
-                <div className="text-right">
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-500/40">
-                    ባጅ: {staffResult.staff.badgeNumber}
+
+                <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block text-[10px]">ባጅ ቁጥር (Badge NO):</span>
+                  <span className="font-bold text-white">{staffResult.staff.badgeNumber}</span>
+                </div>
+
+                <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block text-[10px]">ማዕረግ / RANK:</span>
+                  <span className="font-bold text-white">
+                    {staffResult.staff.rank} {staffResult.staff.rankEn ? `/ ${staffResult.staff.rankEn}` : ''}
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block text-[10px]">የደም አይነት / ጾታ:</span>
+                  <span className="font-bold text-red-400">
+                    {staffResult.staff.bloodType || 'O+'} • {staffResult.staff.gender || 'ወ / M'}
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800 sm:col-span-2">
+                  <span className="text-slate-400 block text-[10px]">ሙሉ ስም (Amharic & English):</span>
+                  <span className="font-bold text-white">
+                    {staffResult.staff.fullName} {staffResult.staff.fullNameEn ? `(${staffResult.staff.fullNameEn})` : ''}
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800 sm:col-span-2">
+                  <span className="text-slate-400 block text-[10px]">ኃላፊነትና የስራ ክፍል:</span>
+                  <span className="font-bold text-slate-200">
+                    {staffResult.staff.responsibilityAm || staffResult.staff.departmentName}
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block text-[10px]">ቁመት / መልክ:</span>
+                  <span className="font-bold text-slate-200">
+                    {staffResult.staff.height || '1.75m'} • {staffResult.staff.complexion || 'ጠይም'}
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block text-[10px]">ስልክ ቁጥር:</span>
+                  <span className="font-bold text-blue-400">{staffResult.staff.phone || '0911223344'}</span>
+                </div>
+
+                <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block text-[10px]">የተመዘገበበት ሰዓት:</span>
+                  <span className="font-bold text-amber-300">
+                    {staffResult.ethiopianTime} (ኢትዮጵያ)
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block text-[10px]">የሰዓት አክባሪነት:</span>
+                  <span className="font-bold text-emerald-400">
+                    {staffResult.punctualityLabel}
                   </span>
                 </div>
               </div>
 
-              {/* Police Officer Photo & Core Information */}
-              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
-                {/* Large Officer Photo with Gold Rank Laurel Border */}
-                <div className="relative shrink-0">
-                  <img
-                    src={
-                      staffResult.staff.photoUrl ||
-                      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80'
-                    }
-                    alt={staffResult.staff.fullName}
-                    className="w-28 h-32 sm:w-32 sm:h-36 rounded-2xl object-cover border-3 border-amber-400 shadow-xl"
-                  />
-                  <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-slate-950 rounded-full p-1 border-2 border-slate-950 shadow">
-                    <ShieldCheck className="w-4 h-4" />
-                  </div>
+              {/* Verification Stamp Badges */}
+              <div className="mt-3 pt-2.5 border-t border-slate-800 space-y-1.5">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold">
+                  <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>የቤኒሻንጉል ጉሙዝ ክልል ፖሊስ ኮሚሽን ይፋዊ ዲጂታል መታወቂያ በሲስተሙ ተቀባይነት አግኝቷል</span>
                 </div>
 
-                {/* Officer Biographical & Assignment Details */}
-                <div className="flex-1 text-center sm:text-left space-y-2">
-                  <div>
-                    <span className="text-[11px] text-amber-400 font-bold uppercase tracking-wider block">
-                      {staffResult.staff.rank}
+                {staffResult.isDepartmentMember ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>የዚህ የስራ ክፍል ({staffResult.doorDepartmentName}) ሰራተኛ መሆንዎ ተረጋግጧል!</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-950/80 border border-blue-500/40 text-blue-300 text-xs font-bold">
+                    <Shield className="w-4 h-4 text-blue-400 shrink-0" />
+                    <span>
+                      የኮሚሽኑ አባል • በ{staffResult.doorDepartmentName} በር ስካን ተደርጓል
                     </span>
-                    <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                      {staffResult.staff.fullName}
-                    </h3>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
-                    <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">መደበኛ የስራ ክፍል:</span>
-                      <span className="font-bold text-white">
-                        {staffResult.staff.departmentName}
-                      </span>
-                    </div>
-
-                    <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">ስካን የተደረገበት በር:</span>
-                      <span className="font-bold text-amber-300">
-                        {staffResult.doorDepartmentName}
-                      </span>
-                    </div>
-
-                    <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">የተመዘገበበት ሰዓት:</span>
-                      <span className="font-bold text-amber-300">
-                        {staffResult.ethiopianTime} (ኢትዮጵያ)
-                      </span>
-                    </div>
-
-                    <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">የሰዓት አክባሪነት:</span>
-                      <span className="font-bold text-emerald-400">
-                        {staffResult.punctualityLabel}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Verification Badges */}
-                  <div className="pt-1 space-y-1.5">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold">
-                      <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span>የቤኒሻንጉል ጉሙዝ ክልል ፖሊስ ኮሚሽን ህጋዊ አባልነት ተረጋግጧል</span>
-                    </div>
-
-                    {staffResult.isDepartmentMember ? (
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span>የዚህ የስራ ክፍል ({staffResult.doorDepartmentName}) ሰራተኛ መሆንዎ ተረጋግጧል!</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-950/80 border border-blue-500/40 text-blue-300 text-xs font-bold">
-                        <Shield className="w-4 h-4 text-blue-400 shrink-0" />
-                        <span>
-                          የኮሚሽኑ አባል • በ{staffResult.doorDepartmentName} በር ስካን ተደርጓል
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -1577,6 +1606,15 @@ export const ScannerKiosk: React.FC<ScannerKioskProps> = ({
           {settings.commissionName || 'የቤኒሻንጉል ጉሙዝ ክልል ፖሊስ ኮሚሽን'} • ዲጂታል የመታወቂያ እና የፋይዳ መስተንግዶ ሲስተም
         </p>
       </div>
+
+      {/* Connected Police Digital ID System (Hidden / Administrative Modal) */}
+      <PoliceIdSystemModal
+        isOpen={isPoliceSystemModalOpen}
+        onClose={() => setIsPoliceSystemModalOpen(false)}
+        staffList={staffList}
+        settings={settings}
+        onScanTest={(id) => handleBarcodeScanned(id)}
+      />
     </div>
   );
 };

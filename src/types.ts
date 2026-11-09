@@ -13,20 +13,63 @@ export interface Department {
   order: number;
 }
 
+export interface PoliceIDRecord {
+  id: string; // Document ID / id_number
+  id_number: string; // e.g. BGR-POL-1600000
+  full_name_am: string;
+  full_name_en: string;
+  rank_am: string;
+  rank_en: string;
+  responsibility_am: string;
+  responsibility_en: string;
+  phone: string;
+  photo_url: string;
+  blood_type: string;
+  badge_number: string;
+  gender: string; // M / F
+  complexion: string;
+  height: string;
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
+  commissioner_signature?: string;
+  member_signature?: string;
+  created_at: string;
+  issued_at: string;
+  expires_at: string;
+  status: 'pending' | 'approved' | 'rejected';
+  department_id?: string;
+}
+
 export interface Staff {
   id: string;
   badgeNumber: string; // Used for police ID back barcode
+  idNumber?: string; // e.g. BGR-POL-1600001
   fullName: string;
+  fullNameEn?: string;
   rank: string; // ኮንስታብል፣ ሳጅን፣ ዋና ሳጅን፣ ረዳት ኢንስፔክተር፣ ኢንስፔክተር፣ ዋና ኢንስፔክተር፣ ኮማንደር
+  rankEn?: string;
   departmentId: string;
   departmentName: string;
+  responsibilityAm?: string;
+  responsibilityEn?: string;
   phone?: string;
   photoUrl?: string;
+  bloodType?: string;
+  gender?: string;
+  height?: string;
+  complexion?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  issuedAt?: string;
+  expiresAt?: string;
+  commissionerSignature?: string;
+  memberSignature?: string;
   status: StaffStatus;
   lastCheckIn?: string;
   lastCheckOut?: string;
   active: boolean;
   registeredAt?: string;
+  idRecord?: PoliceIDRecord;
 }
 
 export interface AttendanceRecord {

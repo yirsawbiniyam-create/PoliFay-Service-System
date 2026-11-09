@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Staff, CommissionSettings } from '../types';
 import { SAMPLE_FAYDA_CITIZENS } from '../data/initialData';
+import { PoliceIdCard } from './PoliceIdCard';
 
 interface DigitalIdCardsProps {
   staffList: Staff[];
@@ -123,109 +124,14 @@ export const DigitalIdCards: React.FC<DigitalIdCardsProps> = ({
               </select>
             </div>
 
-            {/* The Badge Card with 3D Flip style */}
+            {/* The Badge Card with Exact Official BGR Police Digital ID System */}
             {selectedStaff && (
-              <div className="w-full max-w-sm mx-auto aspect-[1.58/1] rounded-2xl overflow-hidden shadow-2xl relative select-none">
-                {!isFlipped ? (
-                  /* FRONT OF POLICE ID */
-                  <div className="w-full h-full bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-2 border-amber-400/80 p-4 flex flex-col justify-between relative overflow-hidden">
-                    {/* Watermark police seal */}
-                    <div className="absolute right-0 bottom-0 w-36 h-36 opacity-10 pointer-events-none">
-                      <img src={settings.logoUrl} alt="Watermark" className="w-full h-full object-contain" />
-                    </div>
-
-                    {/* Top flag stripe and header */}
-                    <div>
-                      <div className="h-1 w-full flex rounded-full overflow-hidden mb-2">
-                        <div className="w-1/3 bg-emerald-600"></div>
-                        <div className="w-1/3 bg-yellow-400"></div>
-                        <div className="w-1/3 bg-rose-600"></div>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <img
-                            src={settings.logoUrl}
-                            alt="Logo"
-                            className="w-8 h-8 rounded-full bg-slate-950 object-contain p-0.5 border border-amber-400/50"
-                          />
-                          <div>
-                            <span className="text-[11px] font-extrabold text-amber-300 block leading-tight font-serif">
-                              {settings.commissionName}
-                            </span>
-                            <span className="text-[9px] text-slate-300 uppercase tracking-widest font-bold">
-                              DIGITAL POLICE ID CARD
-                            </span>
-                          </div>
-                        </div>
-                        <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30 font-bold">
-                          አባል
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Officer Photo & Info */}
-                    <div className="flex items-center gap-3 my-1">
-                      <img
-                        src={
-                          selectedStaff.photoUrl ||
-                          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'
-                        }
-                        alt={selectedStaff.fullName}
-                        className="w-16 h-16 rounded-xl object-cover border-2 border-amber-400 shadow-md shrink-0"
-                      />
-                      <div className="leading-tight">
-                        <span className="text-[10px] text-amber-300 font-bold uppercase tracking-wider block">
-                          {selectedStaff.rank}
-                        </span>
-                        <h4 className="text-sm font-black text-white">{selectedStaff.fullName}</h4>
-                        <div className="text-[10px] text-slate-300 mt-1">
-                          <span className="text-slate-400">ባጅ ቁጥር: </span>
-                          <span className="font-mono font-bold text-amber-400">
-                            {selectedStaff.badgeNumber}
-                          </span>
-                        </div>
-                        <span className="text-[9px] text-slate-400 block truncate max-w-[170px]">
-                          {selectedStaff.departmentName}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Card Footer */}
-                    <div className="flex items-center justify-between text-[9px] text-slate-400 pt-1 border-t border-slate-800">
-                      <span>ተሰጠ፡ 2026</span>
-                      <span className="text-amber-400/80 italic font-semibold">«{settings.motto}»</span>
-                    </div>
-                  </div>
-                ) : (
-                  /* BACK OF POLICE ID (BARCODE SIDE) */
-                  <div className="w-full h-full bg-slate-950 border-2 border-amber-400/80 p-4 flex flex-col justify-between relative">
-                    {/* Magnetic Stripe motif */}
-                    <div className="h-6 w-full bg-slate-900 border-y border-slate-800 -mx-4 -mt-4 mb-2"></div>
-
-                    <div className="text-center">
-                      <span className="text-[10px] text-amber-300 font-bold uppercase tracking-wider block mb-1">
-                        የስራ መግቢያ/መውጫ ስካን ማድረጊያ ባርኮድ (BARCODE)
-                      </span>
-
-                      {/* Clean SVG Barcode for Camera & Barcode Gun */}
-                      <div className="bg-white p-2 rounded-xl shadow-inner my-1">
-                        {renderSvgBarcode(selectedStaff.badgeNumber)}
-                        <span className="font-mono text-slate-900 font-black text-xs tracking-widest block text-center mt-1">
-                          *{selectedStaff.badgeNumber}*
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="text-center text-[9px] text-slate-400 border-t border-slate-900 pt-1">
-                      ይህ መታወቂያ ወደ ስራ ሲገቡና ሲወጡ በር ላይ ባለው ስካነር ፊት መቃኘት አለበት።
-                    </div>
-                  </div>
-                )}
+              <div className="w-full max-w-sm sm:max-w-md mx-auto my-2">
+                <PoliceIdCard staff={selectedStaff} settings={settings} />
               </div>
             )}
 
-            {/* Flip & Action Controls */}
+            {/* Quick Action Controls */}
             <div className="flex items-center justify-center gap-3 mt-4">
               <button
                 onClick={() => setIsFlipped(!isFlipped)}

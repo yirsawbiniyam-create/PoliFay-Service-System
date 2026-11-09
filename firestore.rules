@@ -44,6 +44,17 @@ service cloud.firestore {
     match /settings/{settingsId} {
       allow read, write: if true;
     }
+
+    // Police Digital ID Registry (from Benishangul-Gumuz Police ID System)
+    match /ids/{id} {
+      allow read, write: if true;
+    }
+
+    // Scans & Verification logs
+    match /scans/{scanId} {
+      allow read, create: if true;
+      allow update, delete: if false;
+    }
   }
 }
 

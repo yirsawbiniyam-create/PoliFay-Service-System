@@ -8,6 +8,7 @@ import {
   deleteDoc,
   onSnapshot,
   query,
+  where,
   orderBy,
   limit,
 } from 'firebase/firestore';
@@ -72,6 +73,41 @@ export function saveCachedSettings(settings: CommissionSettings): void {
   }
 }
 
+const POLICE_IDS_COL = 'ids';
+
+export function mapIdRecordToStaff(data: any, defaultDeptId?: string, defaultDeptName?: string): Staff {
+  return {
+    id: data.id_number || data.id || `BGR-POL-${Date.now()}`,
+    idNumber: data.id_number || data.id,
+    badgeNumber: data.badge_number || data.id_number || 'POL-0000',
+    fullName: data.full_name_am || data.fullName || 'የፖሊስ አባል',
+    fullNameEn: data.full_name_en || data.fullNameEn || '',
+    rank: data.rank_am || data.rank || 'ኮንስታብል',
+    rankEn: data.rank_en || data.rankEn || '',
+    departmentId: data.department_id || data.departmentId || defaultDeptId || 'special_office',
+    departmentName: data.responsibility_am || data.departmentName || defaultDeptName || 'የኮሚሽኑ ልዩ ጽ/ቤት',
+    responsibilityAm: data.responsibility_am || data.departmentName,
+    responsibilityEn: data.responsibility_en || '',
+    phone: data.phone || '',
+    photoUrl: data.photo_url || data.photoUrl || '',
+    bloodType: data.blood_type || data.bloodType || 'O+',
+    gender: data.gender || 'ወ / M',
+    height: data.height || '1.75m',
+    complexion: data.complexion || 'ጠይም (Brown)',
+    emergencyContactName: data.emergency_contact_name || '',
+    emergencyContactPhone: data.emergency_contact_phone || '',
+    issuedAt: data.issued_at || data.issuedAt || '2026-01-10',
+    expiresAt: data.expires_at || data.expiresAt || '2028-01-10',
+    commissionerSignature: data.commissioner_signature,
+    memberSignature: data.member_signature,
+    status: data.status === 'on_duty' ? 'on_duty' : 'off_duty',
+    lastCheckIn: data.lastCheckIn,
+    lastCheckOut: data.lastCheckOut,
+    active: true,
+    registeredAt: data.created_at || data.registeredAt || '2026-01-10',
+  };
+}
+
 /**
  * Seed initial data if Firestore is empty
  */
@@ -92,7 +128,7 @@ export async function seedInitialDataIfNeeded(): Promise<void> {
       }
     }
 
-    // 3. Staff
+    // 3. Staff & Police Digital IDs (Synced)
     const staffSnap = await getDocs(collection(db, STAFF_COL));
     if (staffSnap.empty) {
       for (const st of INITIAL_STAFF) {
@@ -100,7 +136,39 @@ export async function seedInitialDataIfNeeded(): Promise<void> {
       }
     }
 
-    // 4. Announcements
+    // 4. Police Digital ID Registry collection ('ids')
+    const idsSnap = await getDocs(collection(db, POLICE_IDS_COL));
+    if (idsSnap.empty) {
+      for (const st of INITIAL_STAFF) {
+        const idDoc = {
+          id: st.id,
+          id_number: st.idNumber || st.id,
+          full_name_am: st.fullName,
+          full_name_en: st.fullNameEn || st.fullName,
+          rank_am: st.rank,
+          rank_en: st.rankEn || st.rank,
+          responsibility_am: st.responsibilityAm || st.departmentName,
+          responsibility_en: st.responsibilityEn || '',
+          phone: st.phone || '',
+          photo_url: st.photoUrl || '',
+          blood_type: st.bloodType || 'O+',
+          badge_number: st.badgeNumber,
+          gender: st.gender || 'ወ / M',
+          complexion: st.complexion || 'ጠይም (Brown)',
+          height: st.height || '1.75m',
+          emergency_contact_name: st.emergencyContactName || '',
+          emergency_contact_phone: st.emergencyContactPhone || '',
+          issued_at: st.issuedAt || '2026-01-10',
+          expires_at: st.expiresAt || '2028-01-10',
+          created_at: new Date().toISOString(),
+          status: 'approved',
+          department_id: st.departmentId,
+        };
+        await setDoc(doc(db, POLICE_IDS_COL, st.id), idDoc);
+      }
+    }
+
+    // 5. Announcements
     const annSnap = await getDocs(collection(db, ANNOUNCEMENTS_COL));
     if (annSnap.empty) {
       for (const ann of INITIAL_ANNOUNCEMENTS) {
@@ -312,13 +380,78 @@ export async function processStaffScan(
   currentDoorDeptId?: string,
   currentDoorDeptName?: string
 ): Promise<StaffScanResult> {
-  const cleanId = badgeOrId.trim();
-  const found = staffList.find(
-    (s) => s.id.toLowerCase() === cleanId.toLowerCase() || s.badgeNumber.toLowerCase() === cleanId.toLowerCase()
+  let cleanId = badgeOrId.trim();
+
+  // 1. If scanned from a verification URL like .../verify/BGR-POL-1600001
+  if (cleanId.includes('/verify/')) {
+    const parts = cleanId.split('/verify/');
+    if (parts[1]) {
+      cleanId = parts[1].split('?')[0].split('#')[0].trim();
+    }
+  }
+
+  // 2. If it's a JSON string payload from a custom QR
+  if (cleanId.startsWith('{') && cleanId.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(cleanId);
+      cleanId =
+        parsed.id_number ||
+        parsed.id ||
+        parsed.badge_number ||
+        parsed.badgeNumber ||
+        cleanId;
+    } catch {}
+  }
+
+  // Find in provided staffList
+  let found = staffList.find(
+    (s) =>
+      s.id.toLowerCase() === cleanId.toLowerCase() ||
+      (s.idNumber && s.idNumber.toLowerCase() === cleanId.toLowerCase()) ||
+      s.badgeNumber.toLowerCase() === cleanId.toLowerCase() ||
+      cleanId.toLowerCase().includes(s.badgeNumber.toLowerCase()) ||
+      (s.idNumber && cleanId.toLowerCase().includes(s.idNumber.toLowerCase()))
   );
 
+  // If not in staffList, query Firestore 'ids' collection directly
   if (!found) {
-    throw new Error(`የፖሊስ ዲጂታል መታወቂያው "${badgeOrId}" በፖሊስ ኮሚሽኑ አባላት መዝገብ ውስጥ አልተገኘም! እባክዎ በአድሚን ገጽ ይመዝገቡ።`);
+    try {
+      // Check doc by ID
+      const idDocRef = doc(db, POLICE_IDS_COL, cleanId);
+      const idDocSnap = await getDoc(idDocRef);
+      if (idDocSnap.exists()) {
+        found = mapIdRecordToStaff(idDocSnap.data(), currentDoorDeptId, currentDoorDeptName);
+      } else {
+        // Query by id_number
+        const qSnap = await getDocs(
+          query(collection(db, POLICE_IDS_COL), where('id_number', '==', cleanId), limit(1))
+        );
+        if (!qSnap.empty) {
+          found = mapIdRecordToStaff(qSnap.docs[0].data(), currentDoorDeptId, currentDoorDeptName);
+        } else {
+          // Query by badge_number
+          const qBadge = await getDocs(
+            query(collection(db, POLICE_IDS_COL), where('badge_number', '==', cleanId), limit(1))
+          );
+          if (!qBadge.empty) {
+            found = mapIdRecordToStaff(qBadge.docs[0].data(), currentDoorDeptId, currentDoorDeptName);
+          }
+        }
+      }
+
+      // Sync into staff collection
+      if (found) {
+        await setDoc(doc(db, STAFF_COL, found.id), found, { merge: true });
+      }
+    } catch (err) {
+      console.warn('Direct lookup in ids collection warning:', err);
+    }
+  }
+
+  if (!found) {
+    throw new Error(
+      `የፖሊስ ዲጂታል መታወቂያው "${badgeOrId}" በፖሊስ ኮሚሽኑ አባላት መዝገብ ውስጥ አልተገኘም! እባክዎ በአድሚን ገጽ ይመዝገቡ።`
+    );
   }
 
   const isDepartmentMember = currentDoorDeptId ? found.departmentId === currentDoorDeptId : true;
