@@ -471,6 +471,10 @@ export async function processVisitorScan(
     faydaId: string;
     fullName?: string;
     phone?: string;
+    photoUrl?: string;
+    gender?: string;
+    address?: string;
+    nationalId?: string;
     departmentId: string;
     departmentName: string;
     purpose?: string;
@@ -512,6 +516,10 @@ export async function processVisitorScan(
     faydaId: cleanFaydaId.substring(0, 1000),
     fullName: safeFullName,
     phone: (faydaPayload.phone || '').substring(0, 50),
+    photoUrl: faydaPayload.photoUrl || undefined,
+    gender: faydaPayload.gender || undefined,
+    address: faydaPayload.address || undefined,
+    nationalId: faydaPayload.nationalId || undefined,
     departmentId: faydaPayload.departmentId,
     departmentName: faydaPayload.departmentName,
     purpose: (faydaPayload.purpose || 'አጠቃላይ አገልግሎት').substring(0, 250),

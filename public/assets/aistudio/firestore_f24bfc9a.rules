@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // DEFAULT DENY
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Global Primitives
+    // ===============================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        request.auth.token.get('email', '').lower() == 'policeregion551@gmail.com' ||
+        request.auth.token.get('email', '').lower() == 'yirsawbiniyam@gmail.com' ||
+        (exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('email', '').lower() == 'policeregion551@gmail.com') ||
+        (exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('email', '').lower() == 'yirsawbiniyam@gmail.com')
+      );
+    }
+
+    function hasValidProfile() {
+      return isSignedIn() && exists(/databases/$(database)/documents/profiles/$(request.auth.uid));
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
+    }
+
+    function isActive() {
+      return isSuperAdmin() || (
+        hasValidProfile() && 
+        getUserData().get('active', false) == true
+      );
+    }
+
+    function isAdmin() {
+      // Check superadmin email in token (for regular login) OR in profile (for anonymous login)
+      return isSuperAdmin() || (
+        isActive() && (
+          getUserData().get('role', '') == 'Administrator' ||
+          getUserData().get('email', '').lower() == 'policeregion551@gmail.com' ||
+          getUserData().get('email', '').lower() == 'yirsawbiniyam@gmail.com'
+        )
+      );
+    }
+
+    function isDataEntry() {
+      return isAdmin() || (
+        isActive() && 
+        getUserData().get('role', '') == 'Data Entry'
+      );
+    }
+
+    function currentUserEmail() {
+      return isSuperAdmin() 
+        ? request.auth.token.get('email', '').lower() 
+        : (hasValidProfile() ? getUserData().get('email', '').lower() : '');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /ids/{id} {
+      allow read, write: if true;
+    }
+
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    match /profiles/{uid} {
+      allow read, write: if true;
+    }
+
+    match /scans/{scanId} {
+      allow read, write: if true;
+    }
+
+    match /assets/{assetId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

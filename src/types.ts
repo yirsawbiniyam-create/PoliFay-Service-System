@@ -51,6 +51,10 @@ export interface VisitorRecord {
   faydaId: string; // FIN or Fayda ID
   fullName: string;
   phone?: string;
+  photoUrl?: string;
+  gender?: string; // ወንድ / ሴት
+  address?: string; // ከተማ / ዞን e.g. አሶሳ፣ ባምባሲ
+  nationalId?: string; // FIN/UIN
   departmentId: string;
   departmentName: string;
   purpose: string;
