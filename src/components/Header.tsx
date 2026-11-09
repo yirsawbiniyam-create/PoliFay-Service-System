@@ -184,20 +184,44 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Navigation Tabs */}
         <nav className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-3 border-t border-slate-800/80 mt-2">
           <button
-            onClick={() => setCurrentTab('kiosk')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 ${
-              currentTab === 'kiosk'
+            onClick={() => setCurrentTab('wall_posters')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+              currentTab === 'wall_posters'
                 ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-md font-bold'
                 : 'text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
           >
             <ScanLine className="w-4 h-4" />
-            <span>በር ላይ ስካነር (Kiosk)</span>
+            <span>የግድግዳ ፖስተር ማተሚያ (Wall Posters)</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('mobile_staff')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+              currentTab === 'mobile_staff'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Shield className="w-4 h-4 text-emerald-400" />
+            <span>የሰራተኛ ሞባይል ፖርታል</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('mobile_visitor')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+              currentTab === 'mobile_visitor'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Users className="w-4 h-4 text-cyan-400" />
+            <span>የባለጉዳይ ሞባይል ፖርታል</span>
           </button>
 
           <button
             onClick={() => setCurrentTab('dashboard')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 cursor-pointer ${
               currentTab === 'dashboard'
                 ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
                 : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -209,19 +233,19 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setCurrentTab('staff')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 cursor-pointer ${
               currentTab === 'staff'
                 ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
                 : 'text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>የሰራተኞች መዝገብ</span>
+            <span>የሰራተኞች በየክፍሉ መዝገብ</span>
           </button>
 
           <button
             onClick={() => setCurrentTab('departments')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 cursor-pointer ${
               currentTab === 'departments'
                 ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
                 : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -233,7 +257,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setCurrentTab('cards')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 cursor-pointer ${
               currentTab === 'cards'
                 ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
                 : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -245,7 +269,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setCurrentTab('announcements')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 cursor-pointer ${
               currentTab === 'announcements'
                 ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
                 : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -262,7 +286,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setCurrentTab('settings')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 cursor-pointer ${
               currentTab === 'settings'
                 ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
                 : 'text-slate-300 hover:text-white hover:bg-slate-800'

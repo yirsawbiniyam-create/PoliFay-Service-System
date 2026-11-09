@@ -31,3 +31,17 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #f59e0b;
 }
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+  .break-after-page {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+}

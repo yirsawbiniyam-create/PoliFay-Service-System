@@ -677,6 +677,187 @@ export async function processVisitorScan(
 }
 
 /**
+ * Direct action for Mobile Staff Check-In / Check-Out
+ */
+export async function recordMobileStaffAttendance(
+  staff: Staff,
+  action: 'check_in' | 'check_out',
+  doorDeptId?: string,
+  doorDeptName?: string
+): Promise<{
+  action: 'check_in' | 'check_out';
+  staff: Staff;
+  record: AttendanceRecord;
+  punctualityLabel: string;
+  ethiopianTime: string;
+}> {
+  const now = new Date();
+  const ethTime = toEthiopianTime(now);
+  const dateLabels = getFormattedDateLabels(now);
+
+  const targetDeptId = doorDeptId || staff.departmentId;
+  const targetDeptName = doorDeptName || staff.departmentName;
+
+  if (action === 'check_in') {
+    const punctuality = evaluateCheckInPunctuality(now);
+    const attendanceId = `att-in-${staff.id}-${dateLabels.gregorianDate}-${Date.now()}`;
+
+    const newAttendance: AttendanceRecord = {
+      id: attendanceId,
+      staffId: staff.id,
+      staffName: staff.fullName,
+      badgeNumber: staff.badgeNumber,
+      rank: staff.rank,
+      departmentId: targetDeptId,
+      departmentName: targetDeptName,
+      date: dateLabels.gregorianDate,
+      month: dateLabels.monthString,
+      checkInTime: ethTime.formatted,
+      checkOutTime: null,
+      punctualityCheckIn: punctuality.status,
+      punctualityCheckOut: 'pending',
+      timestamp: now.toISOString(),
+    };
+
+    await setDoc(doc(db, ATTENDANCE_COL, attendanceId), newAttendance);
+
+    const updatedStaff: Staff = {
+      ...staff,
+      status: 'on_duty',
+      lastCheckIn: ethTime.formatted,
+    };
+    await updateDoc(doc(db, STAFF_COL, staff.id), {
+      status: 'on_duty',
+      lastCheckIn: ethTime.formatted,
+    });
+
+    return {
+      action: 'check_in',
+      staff: updatedStaff,
+      record: newAttendance,
+      punctualityLabel: punctuality.label,
+      ethiopianTime: ethTime.formatted,
+    };
+  } else {
+    // Check out
+    const punctuality = evaluateCheckOutPunctuality(now);
+    const attSnap = await getDocs(
+      query(collection(db, ATTENDANCE_COL), orderBy('timestamp', 'desc'), limit(15))
+    );
+    const openRecord = attSnap.docs
+      .map((d) => d.data() as AttendanceRecord)
+      .find((r) => r.staffId === staff.id && (!r.checkOutTime || r.checkOutTime === null));
+
+    let attendanceId = openRecord?.id;
+    if (attendanceId) {
+      await updateDoc(doc(db, ATTENDANCE_COL, attendanceId), {
+        checkOutTime: ethTime.formatted,
+        punctualityCheckOut: punctuality.status,
+      });
+    } else {
+      attendanceId = `att-out-${staff.id}-${dateLabels.gregorianDate}-${Date.now()}`;
+      const record: AttendanceRecord = {
+        id: attendanceId,
+        staffId: staff.id,
+        staffName: staff.fullName,
+        badgeNumber: staff.badgeNumber,
+        rank: staff.rank,
+        departmentId: targetDeptId,
+        departmentName: targetDeptName,
+        date: dateLabels.gregorianDate,
+        month: dateLabels.monthString,
+        checkInTime: staff.lastCheckIn || ethTime.formatted,
+        checkOutTime: ethTime.formatted,
+        punctualityCheckIn: 'high',
+        punctualityCheckOut: punctuality.status,
+        timestamp: now.toISOString(),
+      };
+      await setDoc(doc(db, ATTENDANCE_COL, attendanceId), record);
+    }
+
+    const updatedStaff: Staff = {
+      ...staff,
+      status: 'off_duty',
+      lastCheckOut: ethTime.formatted,
+    };
+    await updateDoc(doc(db, STAFF_COL, staff.id), {
+      status: 'off_duty',
+      lastCheckOut: ethTime.formatted,
+    });
+
+    const finalRecord: AttendanceRecord = {
+      id: attendanceId,
+      staffId: staff.id,
+      staffName: staff.fullName,
+      badgeNumber: staff.badgeNumber,
+      rank: staff.rank,
+      departmentId: targetDeptId,
+      departmentName: targetDeptName,
+      date: dateLabels.gregorianDate,
+      month: dateLabels.monthString,
+      checkInTime: staff.lastCheckIn || ethTime.formatted,
+      checkOutTime: ethTime.formatted,
+      punctualityCheckIn: 'high',
+      punctualityCheckOut: punctuality.status,
+      timestamp: now.toISOString(),
+    };
+
+    return {
+      action: 'check_out',
+      staff: updatedStaff,
+      record: finalRecord,
+      punctualityLabel: punctuality.label,
+      ethiopianTime: ethTime.formatted,
+    };
+  }
+}
+
+/**
+ * Mobile Visitor Entry Registration
+ */
+export async function recordMobileVisitorEntry(data: {
+  fullName: string;
+  phone: string;
+  departmentId: string;
+  departmentName: string;
+  purpose?: string;
+  idCardFrontPhoto?: string;
+  idCardBackPhoto?: string;
+}): Promise<VisitorRecord> {
+  const now = new Date();
+  const ethTime = toEthiopianTime(now);
+  const dateLabels = getFormattedDateLabels(now);
+
+  const visitorId = `vis-mob-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const faydaId = `VIS-${data.phone.replace(/[^0-9]/g, '').slice(-6) || Date.now().toString().slice(-6)}`;
+
+  const newVisitor: VisitorRecord = {
+    id: visitorId,
+    faydaId,
+    fullName: data.fullName.trim(),
+    phone: data.phone.trim(),
+    departmentId: data.departmentId,
+    departmentName: data.departmentName,
+    purpose: data.purpose?.trim() || 'የጉዳይ መስተንግዶ',
+    checkInTime: ethTime.formatted,
+    checkOutTime: null,
+    date: dateLabels.gregorianDate,
+    status: 'active',
+    idCardFrontPhoto: data.idCardFrontPhoto,
+    idCardBackPhoto: data.idCardBackPhoto,
+  };
+
+  try {
+    await setDoc(doc(db, VISITORS_COL, visitorId), newVisitor);
+  } catch (err) {
+    console.warn('Mobile visitor firestore write warning:', err);
+  }
+
+  return newVisitor;
+}
+
+
+/**
  * Submit Visitor Rating & Complete Exit
  * Options:
  * 5: "እጅግ በጣም ረክቻለሁ"

@@ -105,6 +105,8 @@ export interface VisitorRecord {
   checkOutTime?: string | null;
   date: string;
   status: 'active' | 'completed';
+  idCardFrontPhoto?: string;
+  idCardBackPhoto?: string;
   rating?: number | null; // 1 to 5
   ratingText?: string | null;
 }
