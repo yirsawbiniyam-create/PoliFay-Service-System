@@ -141,6 +141,7 @@ export interface CommissionSettings {
   morningStart: string; // "08:30" (2:30 Ethiopian)
   morningDeadline: string; // "09:00" (3:00 Ethiopian)
   eveningExitTime: string; // "17:00" (11:00 Ethiopian)
+  adminPin?: string; // Secure Admin Passcode (e.g. "1992")
   updatedAt?: string;
 }
 

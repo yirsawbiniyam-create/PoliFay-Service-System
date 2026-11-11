@@ -11,6 +11,7 @@ import {
   Sparkles,
   Layers,
   Upload,
+  Lock,
 } from 'lucide-react';
 import { CommissionSettings } from '../types';
 import { updateSettings } from '../services/dbService';
@@ -39,6 +40,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ settings, onOp
   const [morningStart, setMorningStart] = useState(settings.morningStart);
   const [morningDeadline, setMorningDeadline] = useState(settings.morningDeadline);
   const [eveningExitTime, setEveningExitTime] = useState(settings.eveningExitTime);
+  const [adminPin, setAdminPin] = useState(settings.adminPin || '1992');
 
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -54,6 +56,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ settings, onOp
     setMorningStart(settings.morningStart);
     setMorningDeadline(settings.morningDeadline);
     setEveningExitTime(settings.eveningExitTime);
+    setAdminPin(settings.adminPin || '1992');
   }, [settings]);
 
   // Logo Presets
@@ -103,6 +106,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ settings, onOp
         morningStart,
         morningDeadline,
         eveningExitTime,
+        adminPin: adminPin.trim() || '1992',
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 4000);
@@ -354,6 +358,37 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ settings, onOp
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white font-mono"
               />
             </div>
+          </div>
+        </div>
+
+        {/* ADMIN SECURITY PIN CARD */}
+        <div className="bg-slate-900 border-2 border-rose-500/40 p-6 rounded-2xl shadow-xl space-y-4">
+          <div className="flex items-center gap-2 text-rose-400">
+            <Lock className="w-5 h-5 text-rose-400" />
+            <h3 className="font-bold text-lg text-white">
+              የአስተዳዳሪ (Admin) ጥብቅ የደህንነት ፒን (Security PIN)
+            </h3>
+          </div>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            በግድግዳ ላይ የተለጠፉትን ስካን ያደረጉ ሰራተኞች ወይም ባለጉዳዮች ወደ አድሚን ገጽ እንዳይገቡ የሚያግደው የይለፍ ቃል ነው።
+            አድሚኑ ወደ ሲስተሙ ሲገባ ይህንን ፒን በማስገባት ብቻ ይገባል።
+          </p>
+
+          <div className="max-w-xs">
+            <label className="block text-xs font-bold text-slate-300 mb-1">
+              የአድሚን ፒን ቁጥር (4-8 አሃዞች)
+            </label>
+            <input
+              type="text"
+              required
+              value={adminPin}
+              onChange={(e) => setAdminPin(e.target.value)}
+              placeholder="1992"
+              className="w-full bg-slate-950 border border-slate-700 focus:border-rose-500 rounded-xl px-3 py-2 text-white font-mono tracking-widest text-lg outline-none"
+            />
+            <span className="text-[10px] text-slate-400 block mt-1">
+              የቀደመው ይፋዊ ፒን፡ 1992 (በፈለጉት ጊዜ መቀየር ይችላሉ)
+            </span>
           </div>
         </div>
 

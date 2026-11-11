@@ -7,29 +7,30 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Departments
+    // Departments (Public read, admin configuration)
     match /departments/{departmentId} {
       allow read, write: if true;
     }
 
-    // Staff (Police officers)
+    // Staff (Police officers - delete locked to prevent malicious data wipe)
     match /staff/{staffId} {
-      allow read, write: if true;
+      allow read, create, update: if true;
+      allow delete: if false;
     }
 
-    // Attendance records (Staff check-in / check-out)
+    // Attendance records (Staff check-in / check-out - immutable log)
     match /attendance/{attendanceId} {
       allow read, create, update: if true;
       allow delete: if false;
     }
 
-    // Visitors (Fayda Digital ID records)
+    // Visitors (Fayda Digital ID records - immutable log)
     match /visitors/{visitorId} {
       allow read, create, update: if true;
       allow delete: if false;
     }
 
-    // Feedbacks (Visitor 1-5 ratings & satisfaction metrics)
+    // Feedbacks (Visitor 1-5 ratings & satisfaction metrics - write-once)
     match /feedbacks/{feedbackId} {
       allow read, create: if true;
       allow update, delete: if false;
@@ -57,4 +58,3 @@ service cloud.firestore {
     }
   }
 }
-

@@ -18,13 +18,17 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { Department, CommissionSettings, VisitorRecord } from '../types';
-import { recordMobileVisitorEntry, submitVisitorFeedback } from '../services/dbService';
+import {
+  recordMobileVisitorEntry,
+  submitVisitorFeedback,
+  lookupVisitorByPhone,
+} from '../services/dbService';
 import { soundEffects } from '../utils/audio';
 
 interface MobileVisitorPortalProps {
   departments: Department[];
   settings: CommissionSettings;
-  visitors: VisitorRecord[];
+  visitors?: VisitorRecord[];
   initialDeptId?: string;
   onClose?: () => void;
 }
@@ -32,7 +36,7 @@ interface MobileVisitorPortalProps {
 export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
   departments,
   settings,
-  visitors,
+  visitors = [],
   initialDeptId,
   onClose,
 }) => {
@@ -130,40 +134,51 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
     }
   };
 
-  // FEEDBACK: Look up active visitor
-  const handleLookupVisitor = (e?: React.FormEvent) => {
+  const [isLookingUp, setIsLookingUp] = useState(false);
+
+  // FEEDBACK: Look up active visitor (Strictly isolated: queries ONLY this phone number)
+  const handleLookupVisitor = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setFeedbackError(null);
 
-    const q = feedbackPhone.trim().toLowerCase();
+    const q = feedbackPhone.trim();
     if (!q) {
       setFeedbackError('እባክዎ የስልክ ቁጥርዎን ያስገቡ!');
       return;
     }
 
-    // Look in today's active visitors or any visitor matching phone
-    const found = visitors.find(
-      (v) =>
-        v.phone &&
-        v.phone.replace(/[^0-9]/g, '').includes(q.replace(/[^0-9]/g, '')) &&
-        v.status === 'active'
-    ) || visitors.find(
-      (v) =>
-        v.phone &&
-        v.phone.replace(/[^0-9]/g, '').includes(q.replace(/[^0-9]/g, ''))
-    );
+    setIsLookingUp(true);
+    try {
+      // First check if matching the visitor registered in this active session
+      if (
+        createdVisitor &&
+        (createdVisitor.phone || '').replace(/[^0-9]/g, '').includes(q.replace(/[^0-9]/g, ''))
+      ) {
+        soundEffects.playScanBeep();
+        setTargetVisitor(createdVisitor);
+        setFeedbackStep(2);
+        return;
+      }
 
-    if (!found) {
+      // Query database securely for only this phone
+      const found = await lookupVisitorByPhone(q);
+      if (!found) {
+        soundEffects.playErrorBuzz();
+        setFeedbackError(
+          `በስልክ ቁጥር "${feedbackPhone}" የተመዘገበ የባለጉዳይ መረጃ አልተገኘም። እባክዎ አስቀድመው መመዝገብዎን ያረጋግጡ።`
+        );
+        return;
+      }
+
+      soundEffects.playScanBeep();
+      setTargetVisitor(found);
+      setFeedbackStep(2);
+    } catch (err: any) {
       soundEffects.playErrorBuzz();
-      setFeedbackError(
-        `በስልክ ቁጥር "${feedbackPhone}" የተመዘገበ የባለጉዳይ መረጃ አልተገኘም። እባክዎ አስቀድመው መመዝገብዎን ያረጋግጡ።`
-      );
-      return;
+      setFeedbackError('መረጃውን በመፈተሽ ላይ ችግር አጋጥሟል');
+    } finally {
+      setIsLookingUp(false);
     }
-
-    soundEffects.playScanBeep();
-    setTargetVisitor(found);
-    setFeedbackStep(2);
   };
 
   // FEEDBACK: Ratings predefined by user specification
@@ -667,35 +682,6 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
               </div>
             )}
 
-            {/* Quick Suggestions from Active Visitors */}
-            {visitors.filter((v) => v.status === 'active').length > 0 && (
-              <div>
-                <span className="text-[11px] text-slate-400 font-semibold mb-2 block">
-                  ወይም ዛሬ ከመጡ ባለጉዳዮች ስምዎን ይምረጡ፡
-                </span>
-                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
-                  {visitors
-                    .filter((v) => v.status === 'active')
-                    .slice(0, 6)
-                    .map((v) => (
-                      <button
-                        key={v.id}
-                        type="button"
-                        onClick={() => {
-                          setFeedbackPhone(v.phone || '');
-                          setTargetVisitor(v);
-                          setFeedbackStep(2);
-                        }}
-                        className="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-700 flex items-center gap-1 transition-colors cursor-pointer"
-                      >
-                        <span className="font-bold text-amber-300">{v.fullName}</span>
-                        <span className="text-[10px] text-slate-400">({v.departmentName})</span>
-                      </button>
-                    ))}
-                </div>
-              </div>
-            )}
-
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
                 type="button"
@@ -708,10 +694,17 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
 
               <button
                 type="submit"
-                className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black py-3 rounded-xl text-xs sm:text-sm shadow-xl flex items-center justify-center gap-1.5 cursor-pointer"
+                disabled={isLookingUp || !feedbackPhone.trim()}
+                className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-slate-950 font-black py-3 rounded-xl text-xs sm:text-sm shadow-xl flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <span>ቀጣይ</span>
-                <ArrowRight className="w-4 h-4" />
+                {isLookingUp ? (
+                  <span>እየፈተሸ...</span>
+                ) : (
+                  <>
+                    <span>ቀጣይ</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
           </form>

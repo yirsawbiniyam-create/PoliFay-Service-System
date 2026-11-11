@@ -9,10 +9,12 @@ import {
   CheckCircle,
   Copy,
   Scan,
+  CreditCard,
 } from 'lucide-react';
 import { Staff, CommissionSettings } from '../types';
 import { SAMPLE_FAYDA_CITIZENS } from '../data/initialData';
 import { PoliceIdCard } from './PoliceIdCard';
+import { PoliceIdSystemModal } from './PoliceIdSystemModal';
 
 interface DigitalIdCardsProps {
   staffList: Staff[];
@@ -33,6 +35,7 @@ export const DigitalIdCards: React.FC<DigitalIdCardsProps> = ({
   const [isFlipped, setIsFlipped] = useState(false);
   const [selectedFaydaIdx, setSelectedFaydaIdx] = useState(0);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [isIdSystemModalOpen, setIsIdSystemModalOpen] = useState(false);
 
   const selectedStaff =
     staffList.find((s) => s.id === selectedStaffId) || preselectedStaff || staffList[0];
@@ -98,6 +101,14 @@ export const DigitalIdCards: React.FC<DigitalIdCardsProps> = ({
             የፖሊስ አባላት መታወቂያ (ከጀርባ ባርኮድ ያለው) እና የዜጎች የፋይዳ ዲጂታል መታወቂያ
           </p>
         </div>
+
+        <button
+          onClick={() => setIsIdSystemModalOpen(true)}
+          className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-md transition-all cursor-pointer"
+        >
+          <CreditCard className="w-4 h-4" />
+          <span>የዲጂታል መታወቂያ ሲስተም ቋት (Open ID Registry)</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -258,6 +269,15 @@ export const DigitalIdCards: React.FC<DigitalIdCardsProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Central Police ID System Modal */}
+      <PoliceIdSystemModal
+        isOpen={isIdSystemModalOpen}
+        onClose={() => setIsIdSystemModalOpen(false)}
+        staffList={staffList}
+        settings={settings}
+        onScanTest={onSimulateScan}
+      />
     </div>
   );
 };

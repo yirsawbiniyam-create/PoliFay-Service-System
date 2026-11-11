@@ -12,6 +12,7 @@ import {
   Clock,
   Calendar,
   Sparkles,
+  Lock,
 } from 'lucide-react';
 import { CommissionSettings, Announcement } from '../types';
 import { toEthiopianTime, getFormattedDateLabels, isWorkingDay } from '../utils/ethiopianTime';
@@ -22,6 +23,7 @@ interface HeaderProps {
   settings: CommissionSettings;
   announcements: Announcement[];
   onOpenGallery?: () => void;
+  onLockAdmin?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
   settings,
   announcements,
   onOpenGallery,
+  onLockAdmin,
 }) => {
   const [timeInfo, setTimeInfo] = useState(toEthiopianTime());
   const [dateInfo, setDateInfo] = useState(getFormattedDateLabels());
@@ -178,6 +181,17 @@ export const Header: React.FC<HeaderProps> = ({
             >
               {isFullscreen ? <Minimize2 className="w-5 h-5 text-amber-400" /> : <Maximize2 className="w-5 h-5" />}
             </button>
+
+            {onLockAdmin && (
+              <button
+                onClick={onLockAdmin}
+                title="አድሚን ዝጋ (Lock Admin)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-600/40 text-rose-300 text-xs font-bold transition-colors cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">አድሚን ዝጋ</span>
+              </button>
+            )}
           </div>
         </div>
 

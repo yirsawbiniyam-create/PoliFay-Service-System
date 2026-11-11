@@ -93,6 +93,39 @@ export const INITIAL_DEPARTMENTS: Department[] = [
   },
 ];
 
+export const POLICE_PORTRAIT_AVATARS = [
+  {
+    id: 'male_1',
+    label: 'ወንድ አባል 1',
+    url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'female_1',
+    label: 'ሴት አባል 1',
+    url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=300&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'male_2',
+    label: 'ወንድ አባል 2',
+    url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'female_2',
+    label: 'ሴት አባል 2',
+    url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=300&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'male_3',
+    label: 'ወንድ አባል 3',
+    url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=300&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'male_4',
+    label: 'ወንድ አባል 4',
+    url: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=300&auto=format&fit=crop&q=80',
+  },
+];
+
 export const INITIAL_STAFF: Staff[] = [
   {
     id: 'BGR-POL-1600001',
@@ -441,6 +474,7 @@ export const DEFAULT_COMMISSION_SETTINGS: CommissionSettings = {
   morningStart: '08:30', // 2:30 Ethiopian
   morningDeadline: '09:00', // 3:00 Ethiopian
   eveningExitTime: '17:00', // 11:00 Ethiopian
+  adminPin: '1992', // Default secure police commission admin PIN
   updatedAt: new Date().toISOString(),
 };
 

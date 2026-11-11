@@ -109,6 +109,144 @@ export function mapIdRecordToStaff(data: any, defaultDeptId?: string, defaultDep
 }
 
 /**
+ * Look up full police digital ID information from 'ids' collection, 'staff' collection, and INITIAL_STAFF
+ */
+export async function fetchPoliceIdFromRegistry(queryStr: string): Promise<Staff | null> {
+  const clean = queryStr.trim().toUpperCase();
+  if (!clean) return null;
+
+  const normalized = clean.replace(/\s+/g, '');
+  const withPrefix = normalized.startsWith('BGR-POL-') ? normalized : `BGR-POL-${normalized}`;
+  const withBadgePrefix = normalized.startsWith('POL-') ? normalized : `POL-${normalized}`;
+
+  // 1. Check in INITIAL_STAFF (instant in-memory lookup)
+  const initialMatch = INITIAL_STAFF.find((s) => {
+    const sId = s.id.toUpperCase();
+    const sIdNum = (s.idNumber || '').toUpperCase();
+    const sBadge = s.badgeNumber.toUpperCase();
+    const sName = s.fullName.toLowerCase();
+    const qLower = queryStr.trim().toLowerCase();
+
+    return (
+      sId === clean ||
+      sId === normalized ||
+      sId === withPrefix ||
+      (clean.length >= 4 && sId.endsWith(clean)) ||
+      sIdNum === clean ||
+      sIdNum === normalized ||
+      sIdNum === withPrefix ||
+      (clean.length >= 4 && sIdNum.endsWith(clean)) ||
+      sBadge === clean ||
+      sBadge === normalized ||
+      sBadge === withBadgePrefix ||
+      (clean.length >= 3 && sBadge.endsWith(clean)) ||
+      (qLower.length >= 2 && sName.includes(qLower)) ||
+      (qLower.length >= 2 && s.fullNameEn && s.fullNameEn.toLowerCase().includes(qLower))
+    );
+  });
+  if (initialMatch) return initialMatch;
+
+  // 2. Query Firestore 'ids' collection directly by doc ID and variants
+  try {
+    for (const testId of [clean, normalized, withPrefix]) {
+      const idDocRef = doc(db, POLICE_IDS_COL, testId);
+      const idSnap = await getDoc(idDocRef);
+      if (idSnap.exists()) {
+        return mapIdRecordToStaff(idSnap.data());
+      }
+    }
+
+    // Query by id_number with multiple variants
+    for (const testId of [clean, normalized, withPrefix]) {
+      const qSnap = await getDocs(
+        query(collection(db, POLICE_IDS_COL), where('id_number', '==', testId), limit(1))
+      );
+      if (!qSnap.empty) {
+        return mapIdRecordToStaff(qSnap.docs[0].data());
+      }
+    }
+
+    // Query by badge_number
+    for (const testBadge of [clean, normalized, withBadgePrefix]) {
+      const qBadge = await getDocs(
+        query(collection(db, POLICE_IDS_COL), where('badge_number', '==', testBadge), limit(1))
+      );
+      if (!qBadge.empty) {
+        return mapIdRecordToStaff(qBadge.docs[0].data());
+      }
+    }
+
+    // Query all ids documents if clean is 3+ chars to find partial match
+    const allIdsSnap = await getDocs(collection(db, POLICE_IDS_COL));
+    for (const docSnap of allIdsSnap.docs) {
+      const data = docSnap.data();
+      const idNum = (data.id_number || docSnap.id || '').toUpperCase();
+      const badge = (data.badge_number || '').toUpperCase();
+      const nameAm = (data.full_name_am || '').toLowerCase();
+      const qLower = queryStr.trim().toLowerCase();
+
+      if (
+        idNum.includes(clean) ||
+        idNum.endsWith(clean) ||
+        badge.includes(clean) ||
+        (qLower.length >= 2 && nameAm.includes(qLower))
+      ) {
+        return mapIdRecordToStaff(data);
+      }
+    }
+
+    // 3. Query Firestore 'staff' collection by doc ID or idNumber
+    for (const testStaffId of [clean, normalized, withPrefix]) {
+      const staffDocRef = doc(db, STAFF_COL, testStaffId);
+      const staffSnap = await getDoc(staffDocRef);
+      if (staffSnap.exists()) {
+        return staffSnap.data() as Staff;
+      }
+    }
+
+    for (const testStaffId of [clean, normalized, withPrefix]) {
+      const qStaff = await getDocs(
+        query(collection(db, STAFF_COL), where('idNumber', '==', testStaffId), limit(1))
+      );
+      if (!qStaff.empty) {
+        return qStaff.docs[0].data() as Staff;
+      }
+    }
+  } catch (err) {
+    console.warn('fetchPoliceIdFromRegistry error:', err);
+  }
+
+  return null;
+}
+
+/**
+ * Fetch all registered officers in the Police Digital ID System (merging Firestore 'ids' and initial registry)
+ */
+export async function fetchAllPoliceIdsFromRegistry(): Promise<Staff[]> {
+  const map = new Map<string, Staff>();
+
+  // 1. Initial known police officers
+  for (const st of INITIAL_STAFF) {
+    const key = (st.idNumber || st.id).toUpperCase();
+    map.set(key, st);
+  }
+
+  // 2. Fetch from Firestore 'ids' collection
+  try {
+    const idsSnap = await getDocs(collection(db, POLICE_IDS_COL));
+    idsSnap.forEach((docSnap) => {
+      const staff = mapIdRecordToStaff(docSnap.data());
+      const key = (staff.idNumber || staff.id).toUpperCase();
+      map.set(key, staff);
+    });
+  } catch (err) {
+    console.warn('fetchAllPoliceIdsFromRegistry error (using local registry):', err);
+  }
+
+  return Array.from(map.values());
+}
+
+/**
  * Seed initial data if Firestore is empty
  */
 export async function seedInitialDataIfNeeded(): Promise<void> {
@@ -1007,18 +1145,116 @@ export async function deleteDepartment(id: string): Promise<void> {
   await deleteDoc(doc(db, DEPTS_COL, id));
 }
 
-export async function addStaff(st: Omit<Staff, 'id'>): Promise<void> {
-  const id = st.badgeNumber.trim() || `POL-${Date.now().toString().slice(-4)}`;
-  await setDoc(doc(db, STAFF_COL, id), { ...st, id, registeredAt: new Date().toISOString() });
+export async function addStaff(st: Omit<Staff, 'id'> & { id?: string }): Promise<Staff> {
+  const targetId =
+    (st.idNumber && st.idNumber.trim()) ||
+    st.id ||
+    st.badgeNumber.trim() ||
+    `BGR-POL-${Date.now()}`;
+  const now = new Date().toISOString();
+
+  const newStaff: Staff = {
+    ...st,
+    id: targetId,
+    idNumber: st.idNumber || targetId,
+    badgeNumber: st.badgeNumber || `POL-${Math.floor(1000 + Math.random() * 9000)}`,
+    fullName: st.fullName.trim(),
+    fullNameEn: st.fullNameEn?.trim() || st.fullName.trim(),
+    rank: st.rank || 'ኮንስታብል',
+    rankEn: st.rankEn || 'Constable',
+    photoUrl:
+      st.photoUrl ||
+      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80',
+    departmentId: st.departmentId,
+    departmentName: st.departmentName,
+    responsibilityAm: st.responsibilityAm || st.departmentName,
+    responsibilityEn: st.responsibilityEn || '',
+    phone: st.phone || '',
+    bloodType: st.bloodType || 'O+',
+    gender: st.gender || 'ወ / M',
+    height: st.height || '1.75m',
+    complexion: st.complexion || 'ጠይም (Brown)',
+    emergencyContactName: st.emergencyContactName || '',
+    emergencyContactPhone: st.emergencyContactPhone || '',
+    issuedAt: st.issuedAt || '2026-01-10',
+    expiresAt: st.expiresAt || '2028-01-10',
+    status: st.status || 'off_duty',
+    active: true,
+    registeredAt: now,
+  };
+
+  // 1. Save to staff collection
+  await setDoc(doc(db, STAFF_COL, targetId), newStaff, { merge: true });
+
+  // 2. Synchronize to police IDs collection ('ids') so the Police Digital ID System has the complete record with photo!
+  const idDoc = {
+    id: targetId,
+    id_number: newStaff.idNumber,
+    full_name_am: newStaff.fullName,
+    full_name_en: newStaff.fullNameEn,
+    rank_am: newStaff.rank,
+    rank_en: newStaff.rankEn,
+    responsibility_am: newStaff.responsibilityAm,
+    responsibility_en: newStaff.responsibilityEn,
+    phone: newStaff.phone,
+    photo_url: newStaff.photoUrl,
+    blood_type: newStaff.bloodType,
+    badge_number: newStaff.badgeNumber,
+    gender: newStaff.gender,
+    complexion: newStaff.complexion,
+    height: newStaff.height,
+    emergency_contact_name: newStaff.emergencyContactName,
+    emergency_contact_phone: newStaff.emergencyContactPhone,
+    issued_at: newStaff.issuedAt,
+    expires_at: newStaff.expiresAt,
+    created_at: now,
+    status: 'approved',
+    department_id: newStaff.departmentId,
+  };
+  await setDoc(doc(db, POLICE_IDS_COL, targetId), idDoc, { merge: true });
+
+  return newStaff;
 }
 
 export async function updateStaff(id: string, updates: Partial<Staff>): Promise<void> {
   await updateDoc(doc(db, STAFF_COL, id), updates);
+
+  // Sync updates to 'ids' collection
+  try {
+    const idUpdates: any = {};
+    if (updates.fullName !== undefined) idUpdates.full_name_am = updates.fullName;
+    if (updates.fullNameEn !== undefined) idUpdates.full_name_en = updates.fullNameEn;
+    if (updates.rank !== undefined) idUpdates.rank_am = updates.rank;
+    if (updates.rankEn !== undefined) idUpdates.rank_en = updates.rankEn;
+    if (updates.photoUrl !== undefined) idUpdates.photo_url = updates.photoUrl;
+    if (updates.phone !== undefined) idUpdates.phone = updates.phone;
+    if (updates.bloodType !== undefined) idUpdates.blood_type = updates.bloodType;
+    if (updates.gender !== undefined) idUpdates.gender = updates.gender;
+    if (updates.height !== undefined) idUpdates.height = updates.height;
+    if (updates.complexion !== undefined) idUpdates.complexion = updates.complexion;
+    if (updates.responsibilityAm !== undefined) idUpdates.responsibility_am = updates.responsibilityAm;
+    if (updates.departmentId !== undefined) idUpdates.department_id = updates.departmentId;
+    if (updates.badgeNumber !== undefined) idUpdates.badge_number = updates.badgeNumber;
+    if (updates.emergencyContactName !== undefined) idUpdates.emergency_contact_name = updates.emergencyContactName;
+    if (updates.emergencyContactPhone !== undefined) idUpdates.emergency_contact_phone = updates.emergencyContactPhone;
+
+    if (Object.keys(idUpdates).length > 0) {
+      await setDoc(doc(db, POLICE_IDS_COL, id), idUpdates, { merge: true });
+    }
+  } catch (err) {
+    console.warn('Sync to ids collection warning:', err);
+  }
 }
 
 export async function deleteStaff(id: string): Promise<void> {
   await deleteDoc(doc(db, STAFF_COL, id));
+  try {
+    await deleteDoc(doc(db, POLICE_IDS_COL, id));
+  } catch (err) {
+    console.warn('Delete from ids collection warning:', err);
+  }
 }
+
 
 export async function addAnnouncement(ann: Omit<Announcement, 'id'>): Promise<void> {
   const id = `ann-${Date.now()}`;
@@ -1054,5 +1290,28 @@ export async function updateSettings(settings: Partial<CommissionSettings>): Pro
     await setDoc(doc(db, SETTINGS_COL, 'config'), merged, { merge: true });
   } catch (err) {
     console.warn('Firestore setDoc settings warning (persisted locally):', err);
+  }
+}
+
+/**
+ * Securely look up an active or recent visitor by their own phone number
+ * (Prevents leaking the full visitor roster to mobile devices)
+ */
+export async function lookupVisitorByPhone(phoneQuery: string): Promise<VisitorRecord | null> {
+  const clean = phoneQuery.trim().replace(/[^0-9]/g, '');
+  if (!clean || clean.length < 6) return null;
+
+  try {
+    const qSnap = await getDocs(
+      query(collection(db, VISITORS_COL), orderBy('checkInTime', 'desc'), limit(150))
+    );
+    const match = qSnap.docs
+      .map((d) => d.data() as VisitorRecord)
+      .find((v) => (v.phone || '').replace(/[^0-9]/g, '').includes(clean));
+
+    return match || null;
+  } catch (err) {
+    console.warn('lookupVisitorByPhone error:', err);
+    return null;
   }
 }

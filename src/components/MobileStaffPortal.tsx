@@ -15,20 +15,19 @@ import {
 } from 'lucide-react';
 import { Staff, Department, CommissionSettings, AttendanceRecord } from '../types';
 import { PoliceIdCard } from './PoliceIdCard';
-import { recordMobileStaffAttendance } from '../services/dbService';
+import { recordMobileStaffAttendance, fetchPoliceIdFromRegistry } from '../services/dbService';
 import { soundEffects } from '../utils/audio';
 import { toEthiopianTime } from '../utils/ethiopianTime';
 
 interface MobileStaffPortalProps {
-  staffList: Staff[];
   departments: Department[];
   settings: CommissionSettings;
   initialDeptId?: string;
   onClose?: () => void;
+  staffList?: Staff[];
 }
 
 export const MobileStaffPortal: React.FC<MobileStaffPortalProps> = ({
-  staffList,
   departments,
   settings,
   initialDeptId,
@@ -46,6 +45,7 @@ export const MobileStaffPortal: React.FC<MobileStaffPortalProps> = ({
   const [resultRecord, setResultRecord] = useState<AttendanceRecord | null>(null);
   const [punctualityText, setPunctualityText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // Department from wall scan
   const targetDept = departments.find((d) => d.id === initialDeptId) || departments[0];
@@ -54,34 +54,33 @@ export const MobileStaffPortal: React.FC<MobileStaffPortalProps> = ({
     soundEffects.unlockAudio();
   }, []);
 
-  // Handle Step 1 -> Step 2
-  const handleVerifyId = (targetId?: string) => {
+  // Handle Step 1 -> Step 2 (Isolated lookup: loads ONLY this officer's record)
+  const handleVerifyId = async (targetId?: string) => {
     setErrorMsg(null);
-    const query = (targetId || idInput).trim().toLowerCase();
+    const query = (targetId || idInput).trim();
     if (!query) {
       setErrorMsg('እባክዎ የመታወቂያ ቁጥርዎን ያስገቡ!');
       return;
     }
 
-    // Lookup in staff list by ID, ID number, or badge number
-    const found = staffList.find(
-      (s) =>
-        s.id.toLowerCase() === query ||
-        (s.idNumber && s.idNumber.toLowerCase() === query) ||
-        s.badgeNumber.toLowerCase() === query ||
-        query.includes(s.badgeNumber.toLowerCase()) ||
-        (s.idNumber && query.includes(s.idNumber.toLowerCase()))
-    );
+    setIsVerifying(true);
+    try {
+      const found = await fetchPoliceIdFromRegistry(query);
+      if (!found) {
+        soundEffects.playErrorBuzz();
+        setErrorMsg(`የፖሊስ መታወቂያ ቁጥር "${idInput}" በሲስተም ውስጥ አልተገኘም! እባክዎ በትክክል መጻፉን ያረጋግጡ።`);
+        return;
+      }
 
-    if (!found) {
+      soundEffects.playScanBeep();
+      setSelectedStaff(found);
+      setStep(2);
+    } catch (err: any) {
       soundEffects.playErrorBuzz();
-      setErrorMsg(`የፖሊስ መታወቂያ ቁጥር "${idInput}" በኮሚሽኑ ሲስተም ውስጥ አልተገኘም! እባክዎ በትክክል መጻፉን ያረጋግጡ።`);
-      return;
+      setErrorMsg('መረጃውን በመፈተሽ ላይ ችግር አጋጥሟል');
+    } finally {
+      setIsVerifying(false);
     }
-
-    soundEffects.playScanBeep();
-    setSelectedStaff(found);
-    setStep(2);
   };
 
   // Handle Step 3 Action Execution
@@ -213,36 +212,23 @@ export const MobileStaffPortal: React.FC<MobileStaffPortalProps> = ({
               </div>
             )}
 
-            {/* Quick Suggestions for Convenience */}
-            <div>
-              <div className="text-[11px] text-slate-400 font-semibold mb-2">
-                ወይም ለሙከራ ከዚህ ይምረጡ፡
-              </div>
-              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
-                {staffList.slice(0, 6).map((st) => (
-                  <button
-                    key={st.id}
-                    type="button"
-                    onClick={() => {
-                      setIdInput(st.idNumber || st.id);
-                      handleVerifyId(st.idNumber || st.id);
-                    }}
-                    className="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <span className="font-bold text-amber-300">{st.rank}</span>
-                    <span>{st.fullName.split(' ')[0]}</span>
-                    <span className="text-[10px] font-mono text-slate-400">({st.idNumber || st.badgeNumber})</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <button
+              type="button"
+              disabled={isVerifying || !idInput.trim()}
               onClick={() => handleVerifyId()}
-              className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black py-3.5 rounded-2xl text-base shadow-xl flex items-center justify-center gap-2 transition-transform active:scale-98 cursor-pointer"
+              className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-slate-950 font-black py-3.5 rounded-2xl text-base shadow-xl flex items-center justify-center gap-2 transition-transform active:scale-98 cursor-pointer"
             >
-              <span>ቀጣይ (Next)</span>
-              <ArrowRight className="w-5 h-5" />
+              {isVerifying ? (
+                <>
+                  <span className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
+                  <span>መታወቂያውን እየፈተሸ...</span>
+                </>
+              ) : (
+                <>
+                  <span>ቀጣይ (መታወቂያዬን አሳይ)</span>
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
             </button>
           </div>
         </div>

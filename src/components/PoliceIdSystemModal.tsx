@@ -34,10 +34,14 @@ export const PoliceIdSystemModal: React.FC<PoliceIdSystemModalProps> = ({
   onScanTest,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStaff, setSelectedStaff] = useState<Staff>(staffList[0]);
+  const [selectedStaffId, setSelectedStaffId] = useState<string>(staffList[0]?.id || '');
   const [activeTab, setActiveTab] = useState<'card_view' | 'member_list'>('card_view');
 
   if (!isOpen) return null;
+
+  const currentStaff =
+    staffList.find((s) => s.id === selectedStaffId || (s.idNumber && s.idNumber === selectedStaffId)) ||
+    staffList[0];
 
   const filteredStaff = staffList.filter(
     (s) =>
@@ -135,11 +139,11 @@ export const PoliceIdSystemModal: React.FC<PoliceIdSystemModalProps> = ({
                 </span>
 
                 {filteredStaff.map((st) => {
-                  const isSelected = (st.idNumber || st.id) === (selectedStaff.idNumber || selectedStaff.id);
+                  const isSelected = (st.idNumber || st.id) === (currentStaff.idNumber || currentStaff.id);
                   return (
                     <div
                       key={st.id}
-                      onClick={() => setSelectedStaff(st)}
+                      onClick={() => setSelectedStaffId(st.id)}
                       className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                         isSelected
                           ? 'bg-amber-500/15 border-amber-500 text-white shadow-md'
@@ -179,7 +183,7 @@ export const PoliceIdSystemModal: React.FC<PoliceIdSystemModalProps> = ({
               {/* Right Column: Interactive ID Card & Complete Details */}
               <div className="lg:col-span-7 flex flex-col items-center">
                 {/* The Front/Back Card */}
-                <PoliceIdCard staff={selectedStaff} settings={settings} />
+                <PoliceIdCard staff={currentStaff} settings={settings} />
 
                 {/* Complete System Details Box */}
                 <div className="w-full max-w-[420px] mt-4 bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs space-y-2">
@@ -194,46 +198,46 @@ export const PoliceIdSystemModal: React.FC<PoliceIdSystemModalProps> = ({
                     <div>
                       <span className="text-slate-400 block text-[10px]">መለያ ቁጥር (ID NO):</span>
                       <span className="font-mono font-bold text-white">
-                        {selectedStaff.idNumber || selectedStaff.id}
+                        {currentStaff.idNumber || currentStaff.id}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px]">ባጅ ቁጥር (Badge NO):</span>
-                      <span className="font-bold text-white">{selectedStaff.badgeNumber}</span>
+                      <span className="font-bold text-white">{currentStaff.badgeNumber}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px]">ስም (English):</span>
                       <span className="font-bold text-slate-200">
-                        {selectedStaff.fullNameEn || selectedStaff.fullName}
+                        {currentStaff.fullNameEn || currentStaff.fullName}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px]">ማዕረግ (English):</span>
                       <span className="font-bold text-slate-200">
-                        {selectedStaff.rankEn || selectedStaff.rank}
+                        {currentStaff.rankEn || currentStaff.rank}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px]">የደም አይነት / ጾታ:</span>
                       <span className="font-bold text-red-400">
-                        {selectedStaff.bloodType || 'O+'} • {selectedStaff.gender || 'ወ / M'}
+                        {currentStaff.bloodType || 'O+'} • {currentStaff.gender || 'ወ / M'}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px]">ቁመት / መልክ:</span>
                       <span className="font-bold text-slate-200">
-                        {selectedStaff.height || '1.75m'} • {selectedStaff.complexion || 'ጠይም'}
+                        {currentStaff.height || '1.75m'} • {currentStaff.complexion || 'ጠይም'}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px]">ስልክ ቁጥር:</span>
-                      <span className="font-bold text-blue-400">{selectedStaff.phone || 'N/A'}</span>
+                      <span className="font-bold text-blue-400">{currentStaff.phone || 'N/A'}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px]">የአደጋ ጊዜ ተጠሪ:</span>
                       <span className="font-bold text-slate-200">
-                        {selectedStaff.emergencyContactName || 'የቅርብ ቤተሰብ'} (
-                        {selectedStaff.emergencyContactPhone || '0911000000'})
+                        {currentStaff.emergencyContactName || 'የቅርብ ቤተሰብ'} (
+                        {currentStaff.emergencyContactPhone || '0911000000'})
                       </span>
                     </div>
                   </div>
@@ -244,7 +248,7 @@ export const PoliceIdSystemModal: React.FC<PoliceIdSystemModalProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          onScanTest(selectedStaff.idNumber || selectedStaff.id);
+                          onScanTest(currentStaff.idNumber || currentStaff.id);
                           onClose();
                         }}
                         className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs shadow-md transition-all cursor-pointer"
@@ -307,7 +311,7 @@ export const PoliceIdSystemModal: React.FC<PoliceIdSystemModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedStaff(st);
+                            setSelectedStaffId(st.id);
                             setActiveTab('card_view');
                           }}
                           className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold transition-colors cursor-pointer"

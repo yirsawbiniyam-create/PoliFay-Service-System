@@ -153,6 +153,10 @@
     "/settings/{settingsId}": {
       "schema": { "$ref": "#/entities/Settings" },
       "description": "Commission settings, logos, and configuration"
+    },
+    "/ids/{id}": {
+      "schema": { "$ref": "#/entities/Staff" },
+      "description": "Benishangul Gumuz Police Digital ID Registry records"
     }
   }
 }
