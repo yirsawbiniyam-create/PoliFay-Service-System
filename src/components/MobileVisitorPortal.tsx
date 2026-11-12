@@ -22,7 +22,9 @@ import {
   recordMobileVisitorEntry,
   submitVisitorFeedback,
   lookupVisitorByPhone,
+  matchEthiopianPhones,
 } from '../services/dbService';
+import { compressImageFile } from '../utils/imageCompressor';
 import { soundEffects } from '../utils/audio';
 
 interface MobileVisitorPortalProps {
@@ -55,6 +57,8 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
   const [backPhoto, setBackPhoto] = useState<string | null>(null);
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [createdVisitor, setCreatedVisitor] = useState<VisitorRecord | null>(null);
+  const [autoFilledNotice, setAutoFilledNotice] = useState<string | null>(null);
+  const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
 
   // Feedback flow
   const [feedbackStep, setFeedbackStep] = useState<1 | 2 | 3>(1); // 1: Lookup, 2: Rating, 3: Completed
@@ -63,28 +67,75 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
   const [selectedScore, setSelectedScore] = useState<number | null>(null);
   const [selectedScoreLabel, setSelectedScoreLabel] = useState<string>('');
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [isDirectFeedback, setIsDirectFeedback] = useState(false);
+  const [directName, setDirectName] = useState('');
+  const [directDeptId, setDirectDeptId] = useState(initialDeptId || departments[0]?.id || 'special_office');
 
   const frontFileRef = useRef<HTMLInputElement>(null);
   const backFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     soundEffects.unlockAudio();
+    // Pre-populate feedback phone if cached in this browser session
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('bgr_last_visitor_record');
+        if (cached) {
+          const parsed = JSON.parse(cached) as VisitorRecord;
+          if (parsed && parsed.phone) {
+            setFeedbackPhone(parsed.phone);
+          }
+        }
+      } catch {}
+    }
   }, []);
 
   const currentDept = departments.find((d) => d.id === selectedDeptId) || departments[0];
 
-  // Helper for image upload -> base64
-  const handlePhotoUpload = (
+  // Helper for image upload with automatic canvas compression (< 60KB per photo)
+  const handlePhotoUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     setter: (val: string) => void
   ) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setter(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      setIsCompressingPhoto(true);
+      try {
+        const compressed = await compressImageFile(file, 750, 750, 0.68);
+        setter(compressed);
+      } catch {
+        // Fallback to standard reader
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setter(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      } finally {
+        setIsCompressingPhoto(false);
+      }
+    }
+  };
+
+  // Reusable check for returning citizen: auto-fills existing name and photos
+  const handlePhoneBlurOrChange = async (newPhone: string) => {
+    setPhone(newPhone);
+    const digits = newPhone.replace(/[^0-9]/g, '');
+    if (digits.length >= 9) {
+      try {
+        const pastRecord = await lookupVisitorByPhone(newPhone);
+        if (pastRecord) {
+          if (!fullName.trim() || fullName === pastRecord.fullName) {
+            setFullName(pastRecord.fullName);
+            setAutoFilledNotice(`የቀድሞ መረጃ ተገኝቷል፡ «${pastRecord.fullName}» (ስምዎ በራስ-ሰር ተሞልቷል)`);
+          }
+          if (!frontPhoto && pastRecord.idCardFrontPhoto) {
+            setFrontPhoto(pastRecord.idCardFrontPhoto);
+          }
+          if (!backPhoto && pastRecord.idCardBackPhoto) {
+            setBackPhoto(pastRecord.idCardBackPhoto);
+          }
+        }
+      } catch {}
     }
   };
 
@@ -136,7 +187,7 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
 
   const [isLookingUp, setIsLookingUp] = useState(false);
 
-  // FEEDBACK: Look up active visitor (Strictly isolated: queries ONLY this phone number)
+  // FEEDBACK: Look up active or recent visitor
   const handleLookupVisitor = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setFeedbackError(null);
@@ -149,23 +200,20 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
 
     setIsLookingUp(true);
     try {
-      // First check if matching the visitor registered in this active session
-      if (
-        createdVisitor &&
-        (createdVisitor.phone || '').replace(/[^0-9]/g, '').includes(q.replace(/[^0-9]/g, ''))
-      ) {
+      // 1. Check if matching the visitor registered in this active session
+      if (createdVisitor && matchEthiopianPhones(createdVisitor.phone, q)) {
         soundEffects.playScanBeep();
         setTargetVisitor(createdVisitor);
         setFeedbackStep(2);
         return;
       }
 
-      // Query database securely for only this phone
+      // 2. Query database and local session cache securely
       const found = await lookupVisitorByPhone(q);
       if (!found) {
         soundEffects.playErrorBuzz();
         setFeedbackError(
-          `በስልክ ቁጥር "${feedbackPhone}" የተመዘገበ የባለጉዳይ መረጃ አልተገኘም። እባክዎ አስቀድመው መመዝገብዎን ያረጋግጡ።`
+          `በስልክ ቁጥር "${feedbackPhone}" የተመዘገበ የባለጉዳይ መስተንግዶ ፋይል አልተገኘም። እባክዎ አስቀድመው መመዝገብዎን ያረጋግጡ ወይም በቀጥታ አዲስ አስተያየት ይስጡ።`
         );
         return;
       }
@@ -376,19 +424,30 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
-                <Phone className="w-3.5 h-3.5 text-amber-400" />
-                <span>ስልክ ቁጥር *</span>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-amber-400" />
+                  <span>ስልክ ቁጥር *</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">ቀደም ሲል የተመዘገቡ ከሆነ ስምዎ ይመጣል</span>
               </label>
               <input
                 type="tel"
                 required
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => handlePhoneBlurOrChange(e.target.value)}
+                onBlur={() => handlePhoneBlurOrChange(phone)}
                 placeholder="0911223344"
                 className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-2xl px-4 py-3 text-sm font-mono text-white placeholder-slate-500 outline-none transition-all shadow-inner"
               />
             </div>
+
+            {autoFilledNotice && (
+              <div className="bg-emerald-950/60 border border-emerald-500/50 rounded-xl p-3 flex items-center gap-2 text-xs text-emerald-300 animate-in fade-in">
+                <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{autoFilledNotice}</span>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
@@ -631,6 +690,22 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
             </div>
           </div>
 
+          {/* Quick shortcut to immediately rate if visitor just finished */}
+          <button
+            type="button"
+            onClick={() => {
+              if (createdVisitor) {
+                setTargetVisitor(createdVisitor);
+                setMode('feedback');
+                setFeedbackStep(2);
+              }
+            }}
+            className="w-full max-w-sm bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black px-6 py-3.5 rounded-2xl text-xs sm:text-sm shadow-xl flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.02]"
+          >
+            <MessageSquareHeart className="w-5 h-5" />
+            <span>ጉዳይዎ እንዳበቃ በቀጥታ ደረጃ ይስጡ (አስተያየት)</span>
+          </button>
+
           <button
             onClick={handleResetAll}
             className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition-colors cursor-pointer"
@@ -676,9 +751,51 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
             </div>
 
             {feedbackError && (
-              <div className="bg-rose-950/60 border border-rose-600/50 rounded-xl p-3 flex items-start gap-2.5 text-xs text-rose-200">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                <span>{feedbackError}</span>
+              <div className="bg-rose-950/60 border border-rose-600/50 rounded-2xl p-4 space-y-3 text-xs text-rose-200">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                  <span>{feedbackError}</span>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-rose-800/40">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhone(feedbackPhone);
+                      setMode('service');
+                      setServiceStep(1);
+                    }}
+                    className="w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs text-center flex items-center justify-center gap-1.5 cursor-pointer shadow"
+                  >
+                    <HeartHandshake className="w-3.5 h-3.5" />
+                    <span>አዲስ መስተንግዶ ይመዝገቡ</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDirectFeedback(true);
+                      const directV: VisitorRecord = {
+                        id: `vis-direct-${Date.now()}`,
+                        faydaId: `VIS-${feedbackPhone.replace(/[^0-9]/g, '').slice(-6) || 'DIRECT'}`,
+                        fullName: 'ክቡር ባለጉዳይ',
+                        phone: feedbackPhone.trim(),
+                        departmentId: selectedDeptId,
+                        departmentName: currentDept.name,
+                        purpose: 'ፈጣን የአስተያየት መስጫ',
+                        checkInTime: 'ቀጥታ',
+                        date: new Date().toISOString().split('T')[0],
+                        status: 'active',
+                      };
+                      setTargetVisitor(directV);
+                      setFeedbackStep(2);
+                    }}
+                    className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs text-center flex items-center justify-center gap-1.5 cursor-pointer shadow"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>ቀጥታ ደረጃ ይስጡ</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -724,6 +841,28 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
             <p className="text-xs text-slate-300">
               ባለጉዳይ፡ <span className="font-bold text-amber-300">{targetVisitor.fullName}</span>
             </p>
+          </div>
+
+          {/* Stored Visitor Summary Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 space-y-1.5 text-xs shadow-md">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">የባለጉዳይ መለያ:</span>
+              <span className="font-mono text-amber-300 font-bold">{targetVisitor.faydaId}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">ስልክ ቁጥር:</span>
+              <span className="font-mono text-white">{targetVisitor.phone || feedbackPhone}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">የመግቢያ ሰዓት:</span>
+              <span className="font-mono text-emerald-400">{targetVisitor.checkInTime || 'ዛሬ'}</span>
+            </div>
+            {targetVisitor.rating && (
+              <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-amber-400">
+                <span className="text-slate-400">ቀደም ሲል የተሰጠ ደረጃ:</span>
+                <span className="font-bold">{targetVisitor.rating}/5 ({targetVisitor.ratingText})</span>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2.5">

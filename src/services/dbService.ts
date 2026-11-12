@@ -35,6 +35,7 @@ import {
   getFormattedDateLabels,
   toEthiopianTime,
 } from '../utils/ethiopianTime';
+import { compressBase64Image } from '../utils/imageCompressor';
 
 // Collection references
 const DEPTS_COL = 'departments';
@@ -46,6 +47,41 @@ const ANNOUNCEMENTS_COL = 'announcements';
 const SETTINGS_COL = 'settings';
 
 const LOCAL_STORAGE_SETTINGS_KEY = 'polifay_commission_settings';
+
+/**
+ * Standardize Ethiopian phone number for reliable database lookup.
+ * Handles: +251 9..., 09..., 9..., +251 7..., 07..., etc.
+ * Returns the core 9 digits (e.g. '911223344')
+ */
+export function normalizeEthiopianPhone(phone?: string | null): string {
+  if (!phone) return '';
+  const digits = phone.replace(/[^0-9]/g, '');
+  if (digits.startsWith('251') && digits.length >= 12) {
+    return digits.slice(-9);
+  }
+  if (digits.startsWith('0') && digits.length >= 10) {
+    return digits.slice(-9);
+  }
+  if (digits.length >= 9) {
+    return digits.slice(-9);
+  }
+  return digits;
+}
+
+/**
+ * Compares two Ethiopian phone numbers with bidirectional tolerance
+ */
+export function matchEthiopianPhones(phoneA?: string | null, phoneB?: string | null): boolean {
+  if (!phoneA || !phoneB) return false;
+  const normA = normalizeEthiopianPhone(phoneA);
+  const normB = normalizeEthiopianPhone(phoneB);
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+  if (normA.endsWith(normB) || normB.endsWith(normA)) return true;
+  if (normA.length >= 8 && normB.length >= 8 && normA.slice(-8) === normB.slice(-8)) return true;
+  return false;
+}
+
 
 export function getCachedSettings(): CommissionSettings {
   if (typeof window === 'undefined') return DEFAULT_COMMISSION_SETTINGS;
@@ -619,11 +655,16 @@ export function subscribeToAttendance(onData: (records: AttendanceRecord[]) => v
 
 export function subscribeToVisitors(onData: (visitors: VisitorRecord[]) => void): () => void {
   try {
-    const q = query(collection(db, VISITORS_COL), orderBy('checkInTime', 'desc'), limit(200));
+    const q = query(collection(db, VISITORS_COL), limit(300));
     return onSnapshot(
       q,
       (snapshot) => {
         const list = snapshot.docs.map((d) => d.data() as VisitorRecord);
+        list.sort((a, b) => {
+          const tA = a.timestamp || a.createdAt || a.date || '';
+          const tB = b.timestamp || b.createdAt || b.date || '';
+          return tB.localeCompare(tA);
+        });
         onData(list);
       },
       (error) => {
@@ -638,11 +679,12 @@ export function subscribeToVisitors(onData: (visitors: VisitorRecord[]) => void)
 
 export function subscribeToFeedbacks(onData: (feedbacks: FeedbackRecord[]) => void): () => void {
   try {
-    const q = query(collection(db, FEEDBACKS_COL), orderBy('timestamp', 'desc'), limit(300));
+    const q = query(collection(db, FEEDBACKS_COL), limit(300));
     return onSnapshot(
       q,
       (snapshot) => {
         const list = snapshot.docs.map((d) => d.data() as FeedbackRecord);
+        list.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
         onData(list);
       },
       (error) => {
@@ -1134,29 +1176,73 @@ export async function recordMobileVisitorEntry(data: {
   const ethTime = toEthiopianTime(now);
   const dateLabels = getFormattedDateLabels(now);
 
+  const cleanPhone = data.phone.trim();
+  const normPhone = normalizeEthiopianPhone(cleanPhone);
   const visitorId = `vis-mob-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-  const faydaId = `VIS-${data.phone.replace(/[^0-9]/g, '').slice(-6) || Date.now().toString().slice(-6)}`;
+  const faydaId = `VIS-${normPhone || Date.now().toString().slice(-6)}`;
+
+  // Safe image compression so Firestore 1MB document limit is never exceeded
+  let safeFront = data.idCardFrontPhoto;
+  let safeBack = data.idCardBackPhoto;
+
+  if (safeFront && safeFront.startsWith('data:image')) {
+    try {
+      safeFront = await compressBase64Image(safeFront, 750, 750, 0.65);
+    } catch {}
+  }
+  if (safeBack && safeBack.startsWith('data:image')) {
+    try {
+      safeBack = await compressBase64Image(safeBack, 750, 750, 0.65);
+    } catch {}
+  }
 
   const newVisitor: VisitorRecord = {
     id: visitorId,
     faydaId,
     fullName: data.fullName.trim(),
-    phone: data.phone.trim(),
+    phone: cleanPhone,
+    normalizedPhone: normPhone,
     departmentId: data.departmentId,
     departmentName: data.departmentName,
     purpose: data.purpose?.trim() || 'የጉዳይ መስተንግዶ',
     checkInTime: ethTime.formatted,
     checkOutTime: null,
     date: dateLabels.gregorianDate,
+    timestamp: now.toISOString(),
+    createdAt: now.toISOString(),
     status: 'active',
-    idCardFrontPhoto: data.idCardFrontPhoto,
-    idCardBackPhoto: data.idCardBackPhoto,
+    idCardFrontPhoto: safeFront,
+    idCardBackPhoto: safeBack,
   };
 
+  // 1. Immediately cache in localStorage for fast lookup and offline resilience
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('bgr_last_visitor_record', JSON.stringify(newVisitor));
+      // Also append to local visitor history list
+      const histRaw = localStorage.getItem('bgr_visitor_history');
+      const histList: VisitorRecord[] = histRaw ? JSON.parse(histRaw) : [];
+      histList.unshift(newVisitor);
+      localStorage.setItem('bgr_visitor_history', JSON.stringify(histList.slice(0, 100)));
+    } catch {}
+  }
+
+  // 2. Persist to Firestore
   try {
     await setDoc(doc(db, VISITORS_COL, visitorId), newVisitor);
-  } catch (err) {
+  } catch (err: any) {
     console.warn('Mobile visitor firestore write warning:', err);
+    // If the image size still triggered a quota issue, strip photo and re-save document
+    try {
+      const leanVisitor: VisitorRecord = {
+        ...newVisitor,
+        idCardFrontPhoto: undefined,
+        idCardBackPhoto: undefined,
+      };
+      await setDoc(doc(db, VISITORS_COL, visitorId), leanVisitor);
+    } catch (leanErr) {
+      console.warn('Lean visitor save fallback error:', leanErr);
+    }
   }
 
   return newVisitor;
@@ -1181,21 +1267,24 @@ export async function submitVisitorFeedback(
   const ethTime = toEthiopianTime(now);
   const dateLabels = getFormattedDateLabels(now);
 
-  // Update visitor record to completed
+  // 1. Update visitor record to completed in Firestore
   try {
     await updateDoc(doc(db, VISITORS_COL, visitorId), {
       status: 'completed',
       checkOutTime: ethTime.formatted,
       rating: score,
       ratingText: scoreLabel,
+      ratingTimestamp: now.toISOString(),
     });
   } catch (err) {
     console.warn('Visitor status update warning:', err);
   }
 
-  // Create feedback record with direct getDoc lookup
+  // 2. Lookup visitor details to enrich feedback record
   const feedbackId = `fb-${visitorId}-${Date.now()}`;
   let vFaydaId = '';
+  let vFullName = '';
+  let vPhone = '';
   let vDeptId = 'unknown';
   let vDeptName = 'አጠቃላይ';
 
@@ -1204,6 +1293,8 @@ export async function submitVisitorFeedback(
     if (vDoc.exists()) {
       const v = vDoc.data() as VisitorRecord;
       vFaydaId = v.faydaId || '';
+      vFullName = v.fullName || '';
+      vPhone = v.phone || '';
       vDeptId = v.departmentId || 'unknown';
       vDeptName = v.departmentName || 'አጠቃላይ';
     }
@@ -1211,10 +1302,29 @@ export async function submitVisitorFeedback(
     console.warn('Feedback doc lookup fallback:', e);
   }
 
+  // If local cache has the visitor, fall back to it if Firestore read was empty
+  if (!vFullName && typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem('bgr_last_visitor_record');
+      if (cached) {
+        const parsed = JSON.parse(cached) as VisitorRecord;
+        if (parsed.id === visitorId) {
+          vFaydaId = parsed.faydaId;
+          vFullName = parsed.fullName;
+          vPhone = parsed.phone || '';
+          vDeptId = parsed.departmentId;
+          vDeptName = parsed.departmentName;
+        }
+      }
+    } catch {}
+  }
+
   const fbRecord: FeedbackRecord = {
     id: feedbackId,
     visitorLogId: visitorId,
     faydaId: vFaydaId,
+    fullName: vFullName,
+    phone: vPhone,
     departmentId: vDeptId,
     departmentName: vDeptName,
     score,
@@ -1223,10 +1333,28 @@ export async function submitVisitorFeedback(
     date: dateLabels.gregorianDate,
   };
 
+  // 3. Write feedback to Firestore
   try {
     await setDoc(doc(db, FEEDBACKS_COL, feedbackId), fbRecord);
   } catch (err) {
     console.warn('Feedback write warning:', err);
+  }
+
+  // 4. Update cached active visitor in localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem('bgr_last_visitor_record');
+      if (cached) {
+        const parsed = JSON.parse(cached) as VisitorRecord;
+        if (parsed.id === visitorId) {
+          parsed.status = 'completed';
+          parsed.rating = score;
+          parsed.ratingText = scoreLabel;
+          parsed.checkOutTime = ethTime.formatted;
+          localStorage.setItem('bgr_last_visitor_record', JSON.stringify(parsed));
+        }
+      }
+    } catch {}
   }
 
   return fbRecord;
@@ -1462,24 +1590,93 @@ export async function updateSettings(settings: Partial<CommissionSettings>): Pro
 }
 
 /**
- * Securely look up an active or recent visitor by their own phone number
- * (Prevents leaking the full visitor roster to mobile devices)
+ * Securely look up an active or recent visitor by their own phone number or Fayda ID.
+ * Supports all Ethiopian mobile number formats (+2519..., 09..., 9..., +2517..., 07...).
+ * Prioritizes active (currently present) visits first, then most recent visit history.
  */
 export async function lookupVisitorByPhone(phoneQuery: string): Promise<VisitorRecord | null> {
-  const clean = phoneQuery.trim().replace(/[^0-9]/g, '');
-  if (!clean || clean.length < 6) return null;
+  const qClean = phoneQuery.trim();
+  if (!qClean) return null;
+
+  // 1. Check local session cache first for instant mobile responsiveness
+  let localCandidate: VisitorRecord | null = null;
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem('bgr_last_visitor_record');
+      if (cached) {
+        const parsed = JSON.parse(cached) as VisitorRecord;
+        if (
+          matchEthiopianPhones(parsed.phone, qClean) ||
+          matchEthiopianPhones(parsed.normalizedPhone, qClean) ||
+          (parsed.faydaId && parsed.faydaId.toLowerCase().includes(qClean.toLowerCase()))
+        ) {
+          localCandidate = parsed;
+        }
+      }
+    } catch {}
+  }
 
   try {
-    const qSnap = await getDocs(
-      query(collection(db, VISITORS_COL), orderBy('checkInTime', 'desc'), limit(150))
-    );
-    const match = qSnap.docs
-      .map((d) => d.data() as VisitorRecord)
-      .find((v) => (v.phone || '').replace(/[^0-9]/g, '').includes(clean));
+    // 2. Fetch from Firestore without fragile orderBy constraints
+    const qSnap = await getDocs(query(collection(db, VISITORS_COL), limit(300)));
+    const allVisitors = qSnap.docs.map((d) => d.data() as VisitorRecord);
 
-    return match || null;
+    const matches = allVisitors.filter((v) => {
+      if (v.phone && matchEthiopianPhones(v.phone, qClean)) return true;
+      if (v.normalizedPhone && matchEthiopianPhones(v.normalizedPhone, qClean)) return true;
+      if (v.faydaId && v.faydaId.toLowerCase().includes(qClean.toLowerCase())) return true;
+      if (v.fullName && v.fullName.toLowerCase().includes(qClean.toLowerCase())) return true;
+      return false;
+    });
+
+    if (matches.length > 0) {
+      // Sort: active visits first, then newest timestamp/date
+      matches.sort((a, b) => {
+        if (a.status === 'active' && b.status !== 'active') return -1;
+        if (b.status === 'active' && a.status !== 'active') return 1;
+        const tA = a.timestamp || a.createdAt || a.date || '';
+        const tB = b.timestamp || b.createdAt || b.date || '';
+        return tB.localeCompare(tA);
+      });
+      return matches[0];
+    }
+
+    // Fall back to local candidate if remote match was empty
+    return localCandidate;
   } catch (err) {
-    console.warn('lookupVisitorByPhone error:', err);
-    return null;
+    console.warn('lookupVisitorByPhone firestore error (using local fallback):', err);
+    return localCandidate;
   }
 }
+
+/**
+ * Retrieves full historical visits for a citizen by phone number
+ */
+export async function getVisitorHistoryByPhone(phoneQuery: string): Promise<VisitorRecord[]> {
+  const qClean = phoneQuery.trim();
+  if (!qClean) return [];
+
+  try {
+    const qSnap = await getDocs(query(collection(db, VISITORS_COL), limit(300)));
+    const allVisitors = qSnap.docs.map((d) => d.data() as VisitorRecord);
+
+    const matches = allVisitors.filter((v) => {
+      if (v.phone && matchEthiopianPhones(v.phone, qClean)) return true;
+      if (v.normalizedPhone && matchEthiopianPhones(v.normalizedPhone, qClean)) return true;
+      if (v.faydaId && v.faydaId.toLowerCase().includes(qClean.toLowerCase())) return true;
+      return false;
+    });
+
+    matches.sort((a, b) => {
+      const tA = a.timestamp || a.createdAt || a.date || '';
+      const tB = b.timestamp || b.createdAt || b.date || '';
+      return tB.localeCompare(tA);
+    });
+
+    return matches;
+  } catch (err) {
+    console.warn('getVisitorHistoryByPhone error:', err);
+    return [];
+  }
+}
+

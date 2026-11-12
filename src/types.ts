@@ -109,12 +109,17 @@ export interface VisitorRecord {
   idCardBackPhoto?: string;
   rating?: number | null; // 1 to 5
   ratingText?: string | null;
+  timestamp?: string;
+  createdAt?: string;
+  normalizedPhone?: string;
 }
 
 export interface FeedbackRecord {
   id: string;
   visitorLogId: string;
   faydaId: string;
+  fullName?: string;
+  phone?: string;
   departmentId: string;
   departmentName: string;
   score: number; // 1 to 5

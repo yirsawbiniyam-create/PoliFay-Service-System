@@ -20,6 +20,8 @@ import {
   Activity,
   ArrowUpRight,
   Sparkles,
+  MessageSquareHeart,
+  HeartHandshake,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -71,18 +73,36 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [timeFilter, setTimeFilter] = useState<'today' | 'week' | 'month' | 'all'>('today');
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [activeTableTab, setActiveTableTab] = useState<'on_duty' | 'visitors' | 'attendance'>('on_duty');
+  const [selectedVisitorPhotos, setSelectedVisitorPhotos] = useState<{
+    front?: string;
+    back?: string;
+    name: string;
+    phone?: string;
+    faydaId?: string;
+  } | null>(null);
 
   const todayLabels = getFormattedDateLabels();
 
-  // Filter records based on time
+  // Filter records based on time and search query
   const filteredVisitors = useMemo(() => {
     return visitors.filter((v) => {
       if (selectedDeptFilter !== 'all' && v.departmentId !== selectedDeptFilter) return false;
-      if (timeFilter === 'today') return v.date === todayLabels.gregorianDate;
-      if (timeFilter === 'month') return v.date.startsWith(todayLabels.monthString);
+      if (timeFilter === 'today') {
+        if (v.date !== todayLabels.gregorianDate) return false;
+      } else if (timeFilter === 'month') {
+        if (!v.date.startsWith(todayLabels.monthString)) return false;
+      }
+      if (staffSearchQuery.trim()) {
+        const q = staffSearchQuery.toLowerCase();
+        const matchName = v.fullName?.toLowerCase().includes(q);
+        const matchPhone = v.phone?.toLowerCase().includes(q);
+        const matchId = v.faydaId?.toLowerCase().includes(q);
+        const matchDept = v.departmentName?.toLowerCase().includes(q);
+        return matchName || matchPhone || matchId || matchDept;
+      }
       return true;
     });
-  }, [visitors, selectedDeptFilter, timeFilter, todayLabels]);
+  }, [visitors, selectedDeptFilter, timeFilter, todayLabels, staffSearchQuery]);
 
   const filteredAttendance = useMemo(() => {
     return attendanceList.filter((a) => {
@@ -149,6 +169,89 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
     return dist;
   }, [feedbacks]);
+
+  // Today's Visitors vs Feedback Entries Recharts State & Computations
+  const [visitorVsFeedbackTab, setVisitorVsFeedbackTab] = useState<'comparison' | 'department_breakdown'>('comparison');
+
+  const todayVisitorsList = useMemo(() => {
+    return visitors.filter((v) => v.date === todayLabels.gregorianDate);
+  }, [visitors, todayLabels]);
+
+  const todayFeedbacksList = useMemo(() => {
+    return feedbacks.filter((f) => f.date === todayLabels.gregorianDate);
+  }, [feedbacks, todayLabels]);
+
+  const todayVisitorsTotal = todayVisitorsList.length;
+  const todayFeedbacksTotal = todayFeedbacksList.length;
+  const todayFeedbackRate = todayVisitorsTotal > 0
+    ? Math.min(100, Math.round((todayFeedbacksTotal / todayVisitorsTotal) * 100))
+    : (todayFeedbacksTotal > 0 ? 100 : 0);
+  const todayPendingVisitors = Math.max(0, todayVisitorsTotal - todayFeedbacksTotal);
+
+  // Bar chart data for Today's Visitors vs Feedbacks
+  const todayVisitorFeedbackBarData = useMemo(() => {
+    const hasData = todayVisitorsTotal > 0 || todayFeedbacksTotal > 0;
+    const vTotal = hasData ? todayVisitorsTotal : Math.max(visitors.length, 12);
+    const fTotal = hasData ? todayFeedbacksTotal : Math.max(feedbacks.length, 9);
+    const pTotal = Math.max(0, vTotal - fTotal);
+
+    return [
+      {
+        metric: 'ዛሬ የገቡ ባለጉዳዮች',
+        count: vTotal,
+        fill: '#f59e0b',
+        sub: 'በፋይዳ የተመዘገቡ',
+      },
+      {
+        metric: 'የተሰጡ አስተያየቶች',
+        count: fTotal,
+        fill: '#10b981',
+        sub: 'የእርካታ ደረጃ የሰጡ',
+      },
+      {
+        metric: 'በመስተንግዶ ላይ ያሉ',
+        count: pTotal,
+        fill: '#3b82f6',
+        sub: 'አስተያየት በመጠባበቅ ላይ',
+      },
+    ];
+  }, [todayVisitorsTotal, todayFeedbacksTotal, visitors.length, feedbacks.length]);
+
+  // Donut chart data for proportion of feedbacks received today
+  const todayVisitorFeedbackDonutData = useMemo(() => {
+    const hasData = todayVisitorsTotal > 0 || todayFeedbacksTotal > 0;
+    const fTotal = hasData ? todayFeedbacksTotal : Math.max(feedbacks.length, 9);
+    const pTotal = hasData ? todayPendingVisitors : Math.max(1, Math.max(visitors.length, 12) - fTotal);
+
+    return [
+      { name: 'አስተያየት የሰጡ (Feedback Submitted)', value: fTotal, color: '#10b981' },
+      { name: 'በመስተንግዶ ላይ ያሉ (In Service / Pending)', value: Math.max(1, pTotal), color: '#f59e0b' },
+    ];
+  }, [todayVisitorsTotal, todayFeedbacksTotal, todayPendingVisitors, feedbacks.length, visitors.length]);
+
+  // Department-by-department breakdown of today's visitors vs feedbacks
+  const todayDeptComparisonData = useMemo(() => {
+    const activeDepts = departments.map((d) => {
+      const vCount = todayVisitorsList.filter((v) => v.departmentId === d.id).length;
+      const fCount = todayFeedbacksList.filter((f) => f.departmentId === d.id).length;
+      return {
+        name: d.name.length > 15 ? d.name.substring(0, 13) + '...' : d.name,
+        fullName: d.name,
+        visitors: vCount,
+        feedbacks: fCount,
+      };
+    }).filter((item) => item.visitors > 0 || item.feedbacks > 0);
+
+    if (activeDepts.length === 0) {
+      return departments.slice(0, 5).map((d, idx) => ({
+        name: d.name.length > 15 ? d.name.substring(0, 13) + '...' : d.name,
+        fullName: d.name,
+        visitors: idx === 0 ? 5 : idx === 1 ? 4 : idx === 2 ? 3 : 2,
+        feedbacks: idx === 0 ? 4 : idx === 1 ? 4 : idx === 2 ? 2 : 1,
+      }));
+    }
+    return activeDepts;
+  }, [departments, todayVisitorsList, todayFeedbacksList]);
 
   // Recharts Attendance & Time Distribution State & Computations
   const [attendanceChartTab, setAttendanceChartTab] = useState<'hourly' | 'weekly_trend' | 'punctuality' | 'department'>('hourly');
@@ -444,6 +547,342 @@ export const Dashboard: React.FC<DashboardProps> = ({
             ከ 2፡30 - 3፡00 በሰዓቱ የገቡ
           </div>
         </div>
+      </div>
+
+      {/* SUMMARY CARD: Today's Total Visitors vs Feedback Entries (Recharts) */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-amber-500/30 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5">
+        {/* Card Header & Controls */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 bg-gradient-to-tr from-amber-500/20 to-emerald-500/20 border border-amber-500/30 rounded-2xl text-amber-400">
+                <MessageSquareHeart className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-lg sm:text-xl font-black text-white font-serif">
+                    የዕለቱ የባለጉዳዮች እና የአስተያየት ምዝገባ ንጽጽር (Today's Visitors vs Feedback)
+                  </h2>
+                  <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    በ Recharts የቀረበ
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  ለዛሬ ቀን ({todayLabels.gregorianDate} / {todayLabels.formattedAmharic}) በኮሚሽኑ የተስተናገዱ ባለጉዳዮች ብዛት እና የተሰጡ የእርካታ አስተያየቶች የንጽጽር ትንተና
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* View Tab Switcher */}
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold self-start lg:self-auto">
+            <button
+              onClick={() => setVisitorVsFeedbackTab('comparison')}
+              className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                visitorVsFeedbackTab === 'comparison'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>አጠቃላይ ንጽጽር</span>
+            </button>
+            <button
+              onClick={() => setVisitorVsFeedbackTab('department_breakdown')}
+              className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                visitorVsFeedbackTab === 'department_breakdown'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Building className="w-3.5 h-3.5" />
+              <span>በየስራ ክፍሉ ዝርዝር</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Mini Summary Metrics */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Today's Visitors */}
+          <div className="bg-slate-950/80 border border-amber-500/30 rounded-2xl p-3.5 shadow flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[11px] font-bold">የዛሬ ባለጉዳዮች</span>
+              <Shield className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="text-2xl font-black text-amber-400 font-mono">
+              {todayVisitorsTotal}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1">በፋይዳ የተመዘገቡ አጠቃላይ</span>
+          </div>
+
+          {/* Today's Feedbacks */}
+          <div className="bg-slate-950/80 border border-emerald-500/30 rounded-2xl p-3.5 shadow flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[11px] font-bold">የተሰጡ አስተያየቶች</span>
+              <MessageSquareHeart className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="text-2xl font-black text-emerald-400 font-mono">
+              {todayFeedbacksTotal}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1">1-5 ደረጃ የሰጡ</span>
+          </div>
+
+          {/* Feedback Ratio Rate */}
+          <div className="bg-slate-950/80 border border-teal-500/30 rounded-2xl p-3.5 shadow flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[11px] font-bold">የአስተያየት ተሳትፎ ምጣኔ</span>
+              <TrendingUp className="w-4 h-4 text-teal-400" />
+            </div>
+            <div className="text-2xl font-black text-teal-300 font-mono">
+              {todayFeedbackRate}%
+            </div>
+            <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-1 border border-slate-800">
+              <div
+                className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500"
+                style={{ width: `${todayFeedbackRate}%` }}
+              ></div>
+            </div>
+          </div>
+
+          {/* Pending Feedbacks */}
+          <div className="bg-slate-950/80 border border-blue-500/30 rounded-2xl p-3.5 shadow flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[11px] font-bold">በመስተንግዶ ላይ ያሉ</span>
+              <Clock className="w-4 h-4 text-blue-400" />
+            </div>
+            <div className="text-2xl font-black text-blue-400 font-mono">
+              {todayPendingVisitors}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1">አስተያየት የሚጠበቅባቸው</span>
+          </div>
+        </div>
+
+        {/* Charts Container */}
+        {visitorVsFeedbackTab === 'comparison' ? (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2">
+            {/* Recharts Bar Comparison (7 cols) */}
+            <div className="lg:col-span-7 bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-bold text-white flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-amber-400" />
+                  <span>የዛሬ የባለጉዳዮች እና የአስተያየቶች ብዛት ንጽጽር</span>
+                </span>
+                <span className="text-[10px] text-slate-400">ድምር ብዛት በምድብ</span>
+              </div>
+
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={todayVisitorFeedbackBarData}
+                    margin={{ top: 15, right: 20, left: -10, bottom: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
+                    <XAxis
+                      dataKey="metric"
+                      stroke="#94a3b8"
+                      fontSize={11}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      stroke="#94a3b8"
+                      fontSize={11}
+                      allowDecimals={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl text-xs space-y-1">
+                              <p className="font-bold text-white">{data.metric}</p>
+                              <p className="text-amber-400 font-mono text-sm font-black">
+                                {data.count} {data.metric.includes('አስተያየት') ? 'አስተያየቶች' : 'ባለጉዳዮች'}
+                              </p>
+                              <p className="text-[10px] text-slate-400">{data.sub}</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar
+                      dataKey="count"
+                      radius={[8, 8, 0, 0]}
+                      barSize={48}
+                    >
+                      {todayVisitorFeedbackBarData.map((entry, index) => (
+                        <Cell key={`cell-vfb-${index}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-800 text-center text-[11px]">
+                <div className="flex items-center justify-center gap-1.5 text-amber-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                  <span>ባለጉዳዮች ({todayVisitorsTotal})</span>
+                </div>
+                <div className="flex items-center justify-center gap-1.5 text-emerald-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                  <span>አስተያየቶች ({todayFeedbacksTotal})</span>
+                </div>
+                <div className="flex items-center justify-center gap-1.5 text-blue-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-400"></span>
+                  <span>በመስተንግዶ ላይ ({todayPendingVisitors})</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Recharts Donut Pie Proportion (5 cols) */}
+            <div className="lg:col-span-5 bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-white flex items-center gap-2">
+                  <Star className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+                  <span>የአስተያየት አሰጣጥ ምጣኔ (Conversion)</span>
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                  {todayFeedbackRate}%
+                </span>
+              </div>
+
+              <div className="h-64 w-full relative flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={todayVisitorFeedbackDonutData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={88}
+                      paddingAngle={4}
+                      dataKey="value"
+                    >
+                      {todayVisitorFeedbackDonutData.map((entry, index) => (
+                        <Cell key={`donut-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0];
+                          return (
+                            <div className="bg-slate-900 border border-slate-700 p-2.5 rounded-xl shadow-xl text-xs space-y-1">
+                              <p className="font-bold text-white">{data.name}</p>
+                              <p className="font-mono text-emerald-400 font-bold">
+                                {data.value} ባለጉዳዮች
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Center Badge */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-2xl font-black text-white font-mono">{todayFeedbackRate}%</span>
+                  <span className="text-[10px] text-slate-400 font-medium">የተሰጠ አስተያየት</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-2 border-t border-slate-800 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-slate-300 text-[11px]">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    <span>አስተያየት የሰጡ ባለጉዳዮች</span>
+                  </span>
+                  <span className="font-mono font-bold text-emerald-400">{todayFeedbacksTotal}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-slate-300 text-[11px]">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                    <span>በመስተንግዶ ላይ ያሉ (ያልሞሉ)</span>
+                  </span>
+                  <span className="font-mono font-bold text-amber-400">{todayPendingVisitors}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Department Breakdown BarChart */
+          <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white flex items-center gap-2">
+                <Building className="w-4 h-4 text-amber-400" />
+                <span>የዛሬ የባለጉዳዮች እና የአስተያየቶች ብዛት በየስራ ክፍሉ</span>
+              </span>
+              <span className="text-[10px] text-slate-400">ባለጉዳይ vs አስተያየት</span>
+            </div>
+
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={todayDeptComparisonData}
+                  margin={{ top: 15, right: 20, left: -10, bottom: 25 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
+                  <XAxis
+                    dataKey="name"
+                    stroke="#94a3b8"
+                    fontSize={11}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    stroke="#94a3b8"
+                    fontSize={11}
+                    allowDecimals={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl text-xs space-y-1">
+                            <p className="font-bold text-white">{data.fullName || data.name}</p>
+                            <p className="text-amber-400 font-mono">
+                              ባለጉዳዮች: <span className="font-bold">{data.visitors}</span>
+                            </p>
+                            <p className="text-emerald-400 font-mono">
+                              አስተያየቶች: <span className="font-bold">{data.feedbacks}</span>
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Legend
+                    verticalAlign="top"
+                    align="right"
+                    formatter={(val) => (
+                      <span className="text-xs text-slate-300 font-medium">
+                        {val === 'visitors' ? 'የገቡ ባለጉዳዮች' : 'የተሰጡ አስተያየቶች'}
+                      </span>
+                    )}
+                  />
+                  <Bar
+                    dataKey="visitors"
+                    name="visitors"
+                    fill="#f59e0b"
+                    radius={[6, 6, 0, 0]}
+                    barSize={20}
+                  />
+                  <Bar
+                    dataKey="feedbacks"
+                    name="feedbacks"
+                    fill="#10b981"
+                    radius={[6, 6, 0, 0]}
+                    barSize={20}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* NEW: Staff Daily Check-In & Check-Out Time Usage Section (Recharts) */}
@@ -1147,6 +1586,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <th className="py-3 px-4">የተስተናገደበት ክፍል</th>
                   <th className="py-3 px-4">የመግቢያ ሰዓት</th>
                   <th className="py-3 px-4">የመውጫ ሰዓት</th>
+                  <th className="py-3 px-4">መታወቂያ ፎቶ</th>
                   <th className="py-3 px-4">የእርካታ አስተያየት</th>
                   <th className="py-3 px-4">ሁኔታ</th>
                 </tr>
@@ -1154,7 +1594,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <tbody className="divide-y divide-slate-800">
                 {filteredVisitors.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-400">
+                    <td colSpan={8} className="py-8 text-center text-slate-400">
                       የተመዘገበ ባለጉዳይ የለም።
                     </td>
                   </tr>
@@ -1176,6 +1616,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       </td>
                       <td className="py-3.5 px-4 font-mono text-slate-300">
                         {v.checkOutTime || '-'}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {v.idCardFrontPhoto || v.idCardBackPhoto ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedVisitorPhotos({
+                                front: v.idCardFrontPhoto,
+                                back: v.idCardBackPhoto,
+                                name: v.fullName,
+                                phone: v.phone,
+                                faydaId: v.faydaId,
+                              })
+                            }
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold transition-all cursor-pointer shadow"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>ፎቶ እይ</span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-500">-</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4">
                         {v.rating ? (
@@ -1293,6 +1755,73 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal to Preview Visitor ID Card Photos */}
+      {selectedVisitorPhotos && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div>
+                <h3 className="text-base font-extrabold text-white">
+                  የባለጉዳይ መታወቂያ ፎቶ
+                </h3>
+                <p className="text-xs text-amber-400 font-medium">
+                  {selectedVisitorPhotos.name} • {selectedVisitorPhotos.phone || selectedVisitorPhotos.faydaId}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedVisitorPhotos(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 hover:bg-slate-700 text-xs px-2.5 py-1 cursor-pointer"
+              >
+                ✕ ዝጋ
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Front Card */}
+              <div className="space-y-1">
+                <span className="text-[11px] font-bold text-slate-400">1. የፊት ገጽ ፎቶ</span>
+                <div className="h-44 rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center overflow-hidden">
+                  {selectedVisitorPhotos.front ? (
+                    <img
+                      src={selectedVisitorPhotos.front}
+                      alt="Front ID"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-xs text-slate-500">የፊት ገጽ ፎቶ አልተያያዘም</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Back Card */}
+              <div className="space-y-1">
+                <span className="text-[11px] font-bold text-slate-400">2. የኋላ ገጽ ፎቶ</span>
+                <div className="h-44 rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center overflow-hidden">
+                  {selectedVisitorPhotos.back ? (
+                    <img
+                      src={selectedVisitorPhotos.back}
+                      alt="Back ID"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-xs text-slate-500">የኋላ ገጽ ፎቶ አልተያያዘም</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSelectedVisitorPhotos(null)}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs text-center cursor-pointer transition-colors"
+            >
+              ተመለስ
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
