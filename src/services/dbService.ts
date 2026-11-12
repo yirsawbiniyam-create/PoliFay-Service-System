@@ -12,7 +12,7 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, policeIdDb, testPoliceIdSystemConnection, handleFirestoreError, OperationType } from '../firebase';
 import {
   Department,
   Staff,
@@ -76,9 +76,10 @@ export function saveCachedSettings(settings: CommissionSettings): void {
 const POLICE_IDS_COL = 'ids';
 
 export function mapIdRecordToStaff(data: any, defaultDeptId?: string, defaultDeptName?: string): Staff {
+  const targetId = (data.id_number && data.id_number.trim()) || data.id || `BGR-POL-${Date.now()}`;
   return {
-    id: data.id_number || data.id || `BGR-POL-${Date.now()}`,
-    idNumber: data.id_number || data.id,
+    id: targetId,
+    idNumber: data.id_number || data.id || targetId,
     badgeNumber: data.badge_number || data.id_number || 'POL-0000',
     fullName: data.full_name_am || data.fullName || 'የፖሊስ አባል',
     fullNameEn: data.full_name_en || data.fullNameEn || '',
@@ -86,7 +87,7 @@ export function mapIdRecordToStaff(data: any, defaultDeptId?: string, defaultDep
     rankEn: data.rank_en || data.rankEn || '',
     departmentId: data.department_id || data.departmentId || defaultDeptId || 'special_office',
     departmentName: data.responsibility_am || data.departmentName || defaultDeptName || 'የኮሚሽኑ ልዩ ጽ/ቤት',
-    responsibilityAm: data.responsibility_am || data.departmentName,
+    responsibilityAm: data.responsibility_am || data.departmentName || 'የኮሚሽኑ ልዩ ጽ/ቤት',
     responsibilityEn: data.responsibility_en || '',
     phone: data.phone || '',
     photoUrl: data.photo_url || data.photoUrl || '',
@@ -109,7 +110,10 @@ export function mapIdRecordToStaff(data: any, defaultDeptId?: string, defaultDep
 }
 
 /**
- * Look up full police digital ID information from 'ids' collection, 'staff' collection, and INITIAL_STAFF
+ * Look up full police digital ID information from:
+ * 1. The connected Benishangul-Gumuz Police Digital ID System (bg-police-id-system 'ids' collection)
+ * 2. Local Firestore 'ids' and 'staff' collections
+ * 3. Initial baseline registry
  */
 export async function fetchPoliceIdFromRegistry(queryStr: string): Promise<Staff | null> {
   const clean = queryStr.trim().toUpperCase();
@@ -118,14 +122,159 @@ export async function fetchPoliceIdFromRegistry(queryStr: string): Promise<Staff
   const normalized = clean.replace(/\s+/g, '');
   const withPrefix = normalized.startsWith('BGR-POL-') ? normalized : `BGR-POL-${normalized}`;
   const withBadgePrefix = normalized.startsWith('POL-') ? normalized : `POL-${normalized}`;
+  const qLower = queryStr.trim().toLowerCase();
 
-  // 1. Check in INITIAL_STAFF (instant in-memory lookup)
+  // 1. QUERY DIRECTLY FROM THE CONNECTED BENISHANGUL-GUMUZ POLICE DIGITAL ID SYSTEM (bg-police-id-system)
+  try {
+    // Check by doc ID in policeIdDb
+    for (const testId of [clean, normalized, withPrefix]) {
+      const pDocRef = doc(policeIdDb, POLICE_IDS_COL, testId);
+      const pSnap = await getDoc(pDocRef);
+      if (pSnap.exists()) {
+        const staff = mapIdRecordToStaff(pSnap.data());
+        // Cache to local db for offline/subsequent fast access
+        try {
+          await setDoc(doc(db, POLICE_IDS_COL, staff.id), pSnap.data(), { merge: true });
+        } catch {}
+        return staff;
+      }
+    }
+
+    // Query by id_number in policeIdDb
+    for (const testId of [clean, normalized, withPrefix]) {
+      const qSnap = await getDocs(
+        query(collection(policeIdDb, POLICE_IDS_COL), where('id_number', '==', testId), limit(1))
+      );
+      if (!qSnap.empty) {
+        const data = qSnap.docs[0].data();
+        const staff = mapIdRecordToStaff(data);
+        try {
+          await setDoc(doc(db, POLICE_IDS_COL, staff.id), data, { merge: true });
+        } catch {}
+        return staff;
+      }
+    }
+
+    // Query by badge_number in policeIdDb
+    for (const testBadge of [clean, normalized, withBadgePrefix]) {
+      const qBadge = await getDocs(
+        query(collection(policeIdDb, POLICE_IDS_COL), where('badge_number', '==', testBadge), limit(1))
+      );
+      if (!qBadge.empty) {
+        const data = qBadge.docs[0].data();
+        const staff = mapIdRecordToStaff(data);
+        try {
+          await setDoc(doc(db, POLICE_IDS_COL, staff.id), data, { merge: true });
+        } catch {}
+        return staff;
+      }
+    }
+
+    // Fetch all records from policeIdDb to match partial ID or name
+    const allPoliceSnap = await getDocs(collection(policeIdDb, POLICE_IDS_COL));
+    for (const docSnap of allPoliceSnap.docs) {
+      const data = docSnap.data();
+      const idNum = (data.id_number || docSnap.id || '').toUpperCase();
+      const badge = (data.badge_number || '').toUpperCase();
+      const nameAm = (data.full_name_am || '').toLowerCase();
+      const nameEn = (data.full_name_en || '').toLowerCase();
+
+      if (
+        idNum === clean ||
+        idNum === normalized ||
+        idNum === withPrefix ||
+        (clean.length >= 3 && idNum.includes(clean)) ||
+        badge === clean ||
+        badge === normalized ||
+        badge === withBadgePrefix ||
+        (clean.length >= 3 && badge.includes(clean)) ||
+        (qLower.length >= 2 && nameAm.includes(qLower)) ||
+        (qLower.length >= 2 && nameEn.includes(qLower))
+      ) {
+        const staff = mapIdRecordToStaff(data);
+        try {
+          await setDoc(doc(db, POLICE_IDS_COL, staff.id), data, { merge: true });
+        } catch {}
+        return staff;
+      }
+    }
+  } catch (extErr) {
+    console.warn('Connected bg-police-id-system query notice:', extErr);
+  }
+
+  // 2. QUERY FROM LOCAL FIRESTORE 'ids' COLLECTION
+  try {
+    for (const testId of [clean, normalized, withPrefix]) {
+      const idDocRef = doc(db, POLICE_IDS_COL, testId);
+      const idSnap = await getDoc(idDocRef);
+      if (idSnap.exists()) {
+        return mapIdRecordToStaff(idSnap.data());
+      }
+    }
+
+    for (const testId of [clean, normalized, withPrefix]) {
+      const qSnap = await getDocs(
+        query(collection(db, POLICE_IDS_COL), where('id_number', '==', testId), limit(1))
+      );
+      if (!qSnap.empty) {
+        return mapIdRecordToStaff(qSnap.docs[0].data());
+      }
+    }
+
+    for (const testBadge of [clean, normalized, withBadgePrefix]) {
+      const qBadge = await getDocs(
+        query(collection(db, POLICE_IDS_COL), where('badge_number', '==', testBadge), limit(1))
+      );
+      if (!qBadge.empty) {
+        return mapIdRecordToStaff(qBadge.docs[0].data());
+      }
+    }
+
+    const allIdsSnap = await getDocs(collection(db, POLICE_IDS_COL));
+    for (const docSnap of allIdsSnap.docs) {
+      const data = docSnap.data();
+      const idNum = (data.id_number || docSnap.id || '').toUpperCase();
+      const badge = (data.badge_number || '').toUpperCase();
+      const nameAm = (data.full_name_am || '').toLowerCase();
+      const nameEn = (data.full_name_en || '').toLowerCase();
+
+      if (
+        idNum.includes(clean) ||
+        badge.includes(clean) ||
+        (qLower.length >= 2 && nameAm.includes(qLower)) ||
+        (qLower.length >= 2 && nameEn.includes(qLower))
+      ) {
+        return mapIdRecordToStaff(data);
+      }
+    }
+
+    // 3. Query local 'staff' collection
+    for (const testStaffId of [clean, normalized, withPrefix]) {
+      const staffDocRef = doc(db, STAFF_COL, testStaffId);
+      const staffSnap = await getDoc(staffDocRef);
+      if (staffSnap.exists()) {
+        return staffSnap.data() as Staff;
+      }
+    }
+
+    for (const testStaffId of [clean, normalized, withPrefix]) {
+      const qStaff = await getDocs(
+        query(collection(db, STAFF_COL), where('idNumber', '==', testStaffId), limit(1))
+      );
+      if (!qStaff.empty) {
+        return qStaff.docs[0].data() as Staff;
+      }
+    }
+  } catch (err) {
+    console.warn('Local registry query error:', err);
+  }
+
+  // 4. CHECK IN-MEMORY INITIAL_STAFF (baseline fallback)
   const initialMatch = INITIAL_STAFF.find((s) => {
     const sId = s.id.toUpperCase();
     const sIdNum = (s.idNumber || '').toUpperCase();
     const sBadge = s.badgeNumber.toUpperCase();
     const sName = s.fullName.toLowerCase();
-    const qLower = queryStr.trim().toLowerCase();
 
     return (
       sId === clean ||
@@ -146,108 +295,139 @@ export async function fetchPoliceIdFromRegistry(queryStr: string): Promise<Staff
   });
   if (initialMatch) return initialMatch;
 
-  // 2. Query Firestore 'ids' collection directly by doc ID and variants
-  try {
-    for (const testId of [clean, normalized, withPrefix]) {
-      const idDocRef = doc(db, POLICE_IDS_COL, testId);
-      const idSnap = await getDoc(idDocRef);
-      if (idSnap.exists()) {
-        return mapIdRecordToStaff(idSnap.data());
-      }
-    }
-
-    // Query by id_number with multiple variants
-    for (const testId of [clean, normalized, withPrefix]) {
-      const qSnap = await getDocs(
-        query(collection(db, POLICE_IDS_COL), where('id_number', '==', testId), limit(1))
-      );
-      if (!qSnap.empty) {
-        return mapIdRecordToStaff(qSnap.docs[0].data());
-      }
-    }
-
-    // Query by badge_number
-    for (const testBadge of [clean, normalized, withBadgePrefix]) {
-      const qBadge = await getDocs(
-        query(collection(db, POLICE_IDS_COL), where('badge_number', '==', testBadge), limit(1))
-      );
-      if (!qBadge.empty) {
-        return mapIdRecordToStaff(qBadge.docs[0].data());
-      }
-    }
-
-    // Query all ids documents if clean is 3+ chars to find partial match
-    const allIdsSnap = await getDocs(collection(db, POLICE_IDS_COL));
-    for (const docSnap of allIdsSnap.docs) {
-      const data = docSnap.data();
-      const idNum = (data.id_number || docSnap.id || '').toUpperCase();
-      const badge = (data.badge_number || '').toUpperCase();
-      const nameAm = (data.full_name_am || '').toLowerCase();
-      const qLower = queryStr.trim().toLowerCase();
-
-      if (
-        idNum.includes(clean) ||
-        idNum.endsWith(clean) ||
-        badge.includes(clean) ||
-        (qLower.length >= 2 && nameAm.includes(qLower))
-      ) {
-        return mapIdRecordToStaff(data);
-      }
-    }
-
-    // 3. Query Firestore 'staff' collection by doc ID or idNumber
-    for (const testStaffId of [clean, normalized, withPrefix]) {
-      const staffDocRef = doc(db, STAFF_COL, testStaffId);
-      const staffSnap = await getDoc(staffDocRef);
-      if (staffSnap.exists()) {
-        return staffSnap.data() as Staff;
-      }
-    }
-
-    for (const testStaffId of [clean, normalized, withPrefix]) {
-      const qStaff = await getDocs(
-        query(collection(db, STAFF_COL), where('idNumber', '==', testStaffId), limit(1))
-      );
-      if (!qStaff.empty) {
-        return qStaff.docs[0].data() as Staff;
-      }
-    }
-  } catch (err) {
-    console.warn('fetchPoliceIdFromRegistry error:', err);
-  }
-
   return null;
 }
 
 /**
- * Fetch all registered officers in the Police Digital ID System (merging Firestore 'ids' and initial registry)
+ * Fetch all registered officers in the Police Digital ID System.
+ * Merges the live external bg-police-id-system, local Firestore 'ids', and baseline staff!
  */
 export async function fetchAllPoliceIdsFromRegistry(): Promise<Staff[]> {
   const map = new Map<string, Staff>();
 
-  // 1. Initial known police officers
-  for (const st of INITIAL_STAFF) {
-    const key = (st.idNumber || st.id).toUpperCase();
-    map.set(key, st);
+  // 1. First load from the connected Benishangul-Gumuz Police Digital ID System (bg-police-id-system)
+  try {
+    const pSnap = await getDocs(collection(policeIdDb, POLICE_IDS_COL));
+    pSnap.forEach((docSnap) => {
+      const staff = mapIdRecordToStaff(docSnap.data());
+      const key = (staff.idNumber || staff.id).toUpperCase();
+      map.set(key, staff);
+    });
+  } catch (extErr) {
+    console.warn('Error fetching live from bg-police-id-system:', extErr);
   }
 
-  // 2. Fetch from Firestore 'ids' collection
+  // 2. Merge local Firestore 'ids' collection
   try {
     const idsSnap = await getDocs(collection(db, POLICE_IDS_COL));
     idsSnap.forEach((docSnap) => {
       const staff = mapIdRecordToStaff(docSnap.data());
       const key = (staff.idNumber || staff.id).toUpperCase();
-      map.set(key, staff);
+      if (!map.has(key)) {
+        map.set(key, staff);
+      }
     });
   } catch (err) {
-    console.warn('fetchAllPoliceIdsFromRegistry error (using local registry):', err);
+    console.warn('Error reading local ids collection:', err);
+  }
+
+  // 3. Fallback to INITIAL_STAFF
+  for (const st of INITIAL_STAFF) {
+    const key = (st.idNumber || st.id).toUpperCase();
+    if (!map.has(key)) {
+      map.set(key, st);
+    }
   }
 
   return Array.from(map.values());
 }
 
 /**
- * Seed initial data if Firestore is empty
+ * One-Click / Auto Sync all officers from the Benishangul-Gumuz Police Digital ID System (bg-police-id-system)
+ * into the local Hospitality System's Staff and IDs collections!
+ */
+export async function syncAllPoliceIdsFromExternalSystem(
+  departments?: Department[]
+): Promise<{ added: number; updated: number; total: number; officers: Staff[] }> {
+  let added = 0;
+  let updated = 0;
+  const officers: Staff[] = [];
+  const depts = departments || INITIAL_DEPARTMENTS;
+  const defaultDept = depts[0] || { id: 'special_office', name: 'የኮሚሽኑ ልዩ ጽ/ቤት' };
+
+  try {
+    // 1. Fetch live from bg-police-id-system
+    const pSnap = await getDocs(collection(policeIdDb, POLICE_IDS_COL));
+    
+    // 2. Fetch existing local staff
+    const localStaffSnap = await getDocs(collection(db, STAFF_COL));
+    const localMap = new Map<string, Staff>();
+    localStaffSnap.forEach((d) => {
+      const st = d.data() as Staff;
+      localMap.set((st.idNumber || st.id).toUpperCase(), st);
+    });
+
+    // 3. Sync each officer into local staff & ids
+    for (const docSnap of pSnap.docs) {
+      const data = docSnap.data();
+      const staff = mapIdRecordToStaff(data, defaultDept.id, defaultDept.name);
+      officers.push(staff);
+
+      const key = (staff.idNumber || staff.id).toUpperCase();
+      const existing = localMap.get(key);
+
+      // Save to local 'ids' collection
+      await setDoc(doc(db, POLICE_IDS_COL, staff.id), data, { merge: true });
+
+      // Save to local 'staff' collection with department preserved if already set
+      const staffToSave: Staff = existing
+        ? {
+            ...staff,
+            departmentId: existing.departmentId || staff.departmentId,
+            departmentName: existing.departmentName || staff.departmentName,
+            status: existing.status || 'off_duty',
+            lastCheckIn: existing.lastCheckIn,
+            lastCheckOut: existing.lastCheckOut,
+          }
+        : {
+            ...staff,
+            departmentId: defaultDept.id,
+            departmentName: defaultDept.name,
+            status: 'off_duty',
+          };
+
+      await setDoc(doc(db, STAFF_COL, staff.id), staffToSave, { merge: true });
+
+      if (existing) {
+        updated++;
+      } else {
+        added++;
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('police_ids_synced', { detail: { added, updated, total: pSnap.size } }));
+    }
+
+    return {
+      added,
+      updated,
+      total: pSnap.size,
+      officers,
+    };
+  } catch (err: any) {
+    console.warn('Sync from bg-police-id-system error:', err);
+    return {
+      added: 0,
+      updated: 0,
+      total: 0,
+      officers: [],
+    };
+  }
+}
+
+/**
+ * Seed initial data if Firestore is empty and auto-sync with the Police Digital ID System
  */
 export async function seedInitialDataIfNeeded(): Promise<void> {
   try {
@@ -313,6 +493,11 @@ export async function seedInitialDataIfNeeded(): Promise<void> {
         await setDoc(doc(db, ANNOUNCEMENTS_COL, ann.id), ann);
       }
     }
+
+    // 6. Seamlessly sync all registered officers from the connected Police Digital ID System (bg-police-id-system)
+    syncAllPoliceIdsFromExternalSystem().catch((syncErr) => {
+      console.warn('Auto-sync from bg-police-id-system on startup:', syncErr);
+    });
   } catch (error) {
     console.warn('Initial seeding encountered an error (using local fallbacks if offline):', error);
   }
@@ -551,38 +736,21 @@ export async function processStaffScan(
       (s.idNumber && cleanId.toLowerCase().includes(s.idNumber.toLowerCase()))
   );
 
-  // If not in staffList, query Firestore 'ids' collection directly
+  // If not in staffList, query the connected Police Digital ID System (bg-police-id-system) & local registry directly
   if (!found) {
     try {
-      // Check doc by ID
-      const idDocRef = doc(db, POLICE_IDS_COL, cleanId);
-      const idDocSnap = await getDoc(idDocRef);
-      if (idDocSnap.exists()) {
-        found = mapIdRecordToStaff(idDocSnap.data(), currentDoorDeptId, currentDoorDeptName);
-      } else {
-        // Query by id_number
-        const qSnap = await getDocs(
-          query(collection(db, POLICE_IDS_COL), where('id_number', '==', cleanId), limit(1))
-        );
-        if (!qSnap.empty) {
-          found = mapIdRecordToStaff(qSnap.docs[0].data(), currentDoorDeptId, currentDoorDeptName);
-        } else {
-          // Query by badge_number
-          const qBadge = await getDocs(
-            query(collection(db, POLICE_IDS_COL), where('badge_number', '==', cleanId), limit(1))
-          );
-          if (!qBadge.empty) {
-            found = mapIdRecordToStaff(qBadge.docs[0].data(), currentDoorDeptId, currentDoorDeptName);
-          }
-        }
-      }
-
-      // Sync into staff collection
-      if (found) {
+      const regStaff = await fetchPoliceIdFromRegistry(cleanId);
+      if (regStaff) {
+        found = {
+          ...regStaff,
+          departmentId: currentDoorDeptId || regStaff.departmentId,
+          departmentName: currentDoorDeptName || regStaff.departmentName,
+        };
+        // Sync into staff collection so they are permanently registered locally
         await setDoc(doc(db, STAFF_COL, found.id), found, { merge: true });
       }
     } catch (err) {
-      console.warn('Direct lookup in ids collection warning:', err);
+      console.warn('Scan lookup in connected police ID system warning:', err);
     }
   }
 

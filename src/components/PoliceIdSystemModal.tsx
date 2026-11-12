@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Shield,
   Search,
@@ -14,9 +14,11 @@ import {
   Lock,
   Layers,
   Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 import { Staff, CommissionSettings } from '../types';
 import { PoliceIdCard } from './PoliceIdCard';
+import { fetchAllPoliceIdsFromRegistry } from '../services/dbService';
 
 interface PoliceIdSystemModalProps {
   isOpen: boolean;
@@ -34,16 +36,38 @@ export const PoliceIdSystemModal: React.FC<PoliceIdSystemModalProps> = ({
   onScanTest,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStaffId, setSelectedStaffId] = useState<string>(staffList[0]?.id || '');
+  const [liveOfficers, setLiveOfficers] = useState<Staff[]>(staffList);
+  const [isLoadingLive, setIsLoadingLive] = useState(false);
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'card_view' | 'member_list'>('card_view');
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsLoadingLive(true);
+      fetchAllPoliceIdsFromRegistry()
+        .then((list) => {
+          if (list && list.length > 0) {
+            setLiveOfficers(list);
+            if (!selectedStaffId) {
+              setSelectedStaffId(list[0]?.id || '');
+            }
+          }
+        })
+        .finally(() => {
+          setIsLoadingLive(false);
+        });
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const currentStaff =
-    staffList.find((s) => s.id === selectedStaffId || (s.idNumber && s.idNumber === selectedStaffId)) ||
-    staffList[0];
+  const displayList = liveOfficers.length > 0 ? liveOfficers : staffList;
 
-  const filteredStaff = staffList.filter(
+  const currentStaff =
+    displayList.find((s) => s.id === selectedStaffId || (s.idNumber && s.idNumber === selectedStaffId)) ||
+    displayList[0];
+
+  const filteredStaff = displayList.filter(
     (s) =>
       s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.fullNameEn && s.fullNameEn.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -66,8 +90,9 @@ export const PoliceIdSystemModal: React.FC<PoliceIdSystemModalProps> = ({
                 <h3 className="text-base sm:text-lg font-black text-white">
                   የቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን የዲጂታል መታወቂያ ሲስተም
                 </h3>
-                <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-500/30 hidden sm:inline-block">
-                  የተገናኘ ቋት (Connected System)
+                <span className="text-[10px] bg-emerald-950 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-500/40 inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>ቀጥታ የተገናኘ (bg-police-id-system) • {displayList.length} አባላት</span>
                 </span>
               </div>
               <p className="text-xs text-slate-400">

@@ -295,9 +295,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span className="bg-amber-500/20 text-amber-300 text-xs px-2.5 py-0.5 rounded-full border border-amber-500/30 font-bold">
               ቀጥታ ክትትል (Live)
             </span>
+            <span className="bg-emerald-950 text-emerald-300 text-xs px-2.5 py-0.5 rounded-full border border-emerald-500/40 font-bold inline-flex items-center gap-1 hidden sm:inline-flex">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>ከመታወቂያ ሲስተም ጋር የተገናኘ (bg-police-id-system)</span>
+            </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            የፖሊስ አባላት የስራ መግቢያ/መውጫ፣ የፋይዳ ዲጂታል ባለጉዳይ ምዝገባ እና የክፍሎች አፈጻጸም መረጃ
+            ከቤንሻንጉል ጉሙዝ ፖሊስ ዲጂታል መታወቂያ ሲስተም ጋር የተናበበ፤ የፖሊስ አባላት የስራ መግቢያ/መውጫ፣ የፋይዳ ዲጂታል ባለጉዳይ ምዝገባ እና የክፍሎች አፈጻጸም መረጃ
           </p>
         </div>
 

@@ -29,7 +29,9 @@ import {
   deleteStaff,
   fetchPoliceIdFromRegistry,
   fetchAllPoliceIdsFromRegistry,
+  syncAllPoliceIdsFromExternalSystem,
 } from '../services/dbService';
+import { testPoliceIdSystemConnection } from '../firebase';
 import { PoliceIdCard } from './PoliceIdCard';
 import { INITIAL_STAFF, POLICE_PORTRAIT_AVATARS } from '../data/initialData';
 import { PoliceIdSystemModal } from './PoliceIdSystemModal';
@@ -114,14 +116,52 @@ export const StaffManager: React.FC<StaffManagerProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  // Pre-load registered officers from Police ID System
-  React.useEffect(() => {
-    fetchAllPoliceIdsFromRegistry().then((list) => {
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
+  const [isSystemOnline, setIsSystemOnline] = useState<boolean | null>(true);
+
+  const reloadRegistry = async () => {
+    try {
+      const list = await fetchAllPoliceIdsFromRegistry();
       if (list && list.length > 0) {
         setRegistryOfficers(list);
       }
+    } catch {}
+  };
+
+  // Pre-load registered officers from Police ID System and check connection health
+  React.useEffect(() => {
+    reloadRegistry();
+    testPoliceIdSystemConnection().then((res) => {
+      setIsSystemOnline(res.connected);
     });
+
+    const handleSyncEvent = () => reloadRegistry();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('police_ids_synced', handleSyncEvent);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('police_ids_synced', handleSyncEvent);
+      }
+    };
   }, []);
+
+  const handleSyncFromPoliceIdSystem = async () => {
+    setIsSyncing(true);
+    setSyncStatusMsg(null);
+    try {
+      const res = await syncAllPoliceIdsFromExternalSystem(departments);
+      setSyncStatusMsg(
+        `✓ ${res.total} የፖሊስ አባላት ከመታወቂያ ሲስተም (bg-police-id-system) ጋር ተመሳስለዋል! (${res.added} አዲስ ተመዝግቧል፣ ${res.updated} ታድሷል)`
+      );
+      await reloadRegistry();
+    } catch (err: any) {
+      setSyncStatusMsg(`የማመሳሰል ችግር፡ ${err.message || 'እባክዎ እንደገና ይሞክሩ'}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const filteredStaff = staffList.filter((s) => {
     if (selectedDept !== 'all' && s.departmentId !== selectedDept) return false;
@@ -488,6 +528,45 @@ export const StaffManager: React.FC<StaffManagerProps> = ({
           >
             <UserPlus className="w-4 h-4" />
             <span>አዲስ ሰራተኛ መዝግብ</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Live Bridge Card to Benishangul-Gumuz Police Digital ID System (bg-police-id-system) */}
+      <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-slate-950 border-2 border-amber-500/40 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 shadow">
+            <Shield className="w-7 h-7" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base sm:text-lg font-black text-white font-serif">
+                የቤንሻንጉል ጉሙዝ ክልል ፖሊስ ኮሚሽን የዲጂታል መታወቂያ ሲስተም ትስስር
+              </h2>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>ቀጥታ የተገናኘ (bg-police-id-system)</span>
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-1">
+              ከመታወቂያ ሲስተም ጋር የተናበበ፡ በመታወቂያ ሲስተሙ የተመዘገቡ <strong className="text-amber-400 font-mono">{registryOfficers.length}</strong> የፖሊስ አባላት በቋቱ ውስጥ ይገኛሉ። ሰራተኞችን ሲመዘግቡ በመታወቂያ ቁጥራቸው ብቻ ሙሉ መረጃቸውና ፎቷቸው በቅጽበት ይወርዳል!
+            </p>
+            {syncStatusMsg && (
+              <p className="text-xs text-emerald-300 font-bold mt-2 animate-in fade-in">
+                {syncStatusMsg}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleSyncFromPoliceIdSystem}
+            disabled={isSyncing}
+            className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-lg transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'እያመሳሰለ ነው...' : '🔄 ከመታወቂያ ሲስተም ሁሉንም አባላት አመሳስል'}</span>
           </button>
         </div>
       </div>
