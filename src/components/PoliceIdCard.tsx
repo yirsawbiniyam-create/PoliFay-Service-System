@@ -85,11 +85,11 @@ export const PoliceIdCard: React.FC<PoliceIdCardProps> = ({
                 alt="BGR Flag"
                 className="h-5 sm:h-6 w-9 sm:w-11 object-cover rounded shadow-sm border border-black/20"
               />
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden bg-white shadow-md border-2 border-amber-500 flex items-center justify-center -my-1 p-0.5">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-white shadow-md border-2 border-amber-500 flex items-center justify-center -my-1.5">
                 <img
                   src={logo}
                   alt="Police Seal"
-                  className="w-full h-full object-contain"
+                  className="w-full h-full rounded-full object-cover"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = BENISHANGUL_GUMUZ_POLICE_LOGO_SVG;
                   }}

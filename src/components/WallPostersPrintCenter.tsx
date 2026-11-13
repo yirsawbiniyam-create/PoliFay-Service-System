@@ -116,13 +116,15 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
           </span>
         </div>
 
-        {/* CENTER: Police Commission Logo + System Name (Amharic & English) directly below */}
+        {/* CENTER: Police Commission Logo (Circular & Large) + System Name (Amharic & English) directly below */}
         <div className="col-span-6 flex flex-col items-center justify-center text-center">
-          <img
-            src={settings.logoUrl}
-            alt="የፖሊስ ኮሚሽን ሎጎ"
-            className="w-16 h-16 sm:w-20 sm:h-20 object-contain mb-1.5"
-          />
+          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden border-2 border-amber-500 shadow-lg bg-white mx-auto mb-2 shrink-0">
+            <img
+              src={settings.logoUrl}
+              alt="የፖሊስ ኮሚሽን ሎጎ"
+              className="w-full h-full rounded-full object-cover"
+            />
+          </div>
           <p className="text-xs sm:text-sm font-extrabold text-slate-700 leading-tight">
             {settings.commissionName || 'የቤኒሻንጉል ጉሙዝ ክልል ፖሊስ ኮሚሽን'}
           </p>
@@ -214,12 +216,12 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
 
                 <div className="relative flex items-center justify-center mb-5">
                   <div className="absolute -inset-3 rounded-full bg-gradient-to-tr from-emerald-500/25 via-amber-400/30 to-rose-500/25 blur-xl" />
-                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 lg:w-40 lg:h-40 rounded-full p-1.5 bg-gradient-to-b from-amber-300 via-amber-500 to-emerald-500 shadow-2xl">
-                    <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center p-2.5">
+                  <div className="relative w-36 h-36 sm:w-44 sm:h-44 lg:w-52 lg:h-52 rounded-full p-1.5 bg-gradient-to-b from-amber-300 via-amber-500 to-emerald-500 shadow-2xl">
+                    <div className="w-full h-full rounded-full bg-slate-950 overflow-hidden flex items-center justify-center">
                       <img
                         src={settings.logoUrl}
                         alt="የፖሊስ ኮሚሽን ሎጎ"
-                        className="w-full h-full object-contain drop-shadow-[0_4px_12px_rgba(251,191,36,0.35)]"
+                        className="w-full h-full rounded-full object-cover drop-shadow-[0_4px_12px_rgba(251,191,36,0.35)]"
                       />
                     </div>
                   </div>
@@ -475,12 +477,12 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
 
                       <div className="relative mb-4">
                         <div className="absolute -inset-2 rounded-full bg-gradient-to-tr from-emerald-500/20 via-amber-400/25 to-rose-500/20 blur-lg" />
-                        <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-gradient-to-b from-amber-300 via-amber-500 to-emerald-500 shadow-xl">
-                          <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center p-2">
+                        <div className="relative w-32 h-32 sm:w-40 sm:h-40 rounded-full p-1 bg-gradient-to-b from-amber-300 via-amber-500 to-emerald-500 shadow-xl">
+                          <div className="w-full h-full rounded-full bg-slate-950 overflow-hidden flex items-center justify-center">
                             <img
                               src={settings.logoUrl}
                               alt="Commission Logo"
-                              className="w-full h-full object-contain"
+                              className="w-full h-full rounded-full object-cover"
                             />
                           </div>
                         </div>

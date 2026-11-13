@@ -151,11 +151,11 @@ export default function App() {
         <header className="bg-slate-900 border-b border-amber-500/30 px-4 py-3 sticky top-0 z-30 shadow-lg">
           <div className="max-w-md mx-auto flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full p-0.5 bg-gradient-to-tr from-amber-500 to-amber-200 shrink-0">
+              <div className="w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-amber-500 to-amber-200 overflow-hidden shrink-0">
                 <img
                   src={settings.logoUrl}
                   alt="Commission Crest"
-                  className="w-full h-full rounded-full object-contain bg-slate-950 p-1"
+                  className="w-full h-full rounded-full object-cover bg-slate-950"
                 />
               </div>
               <div>

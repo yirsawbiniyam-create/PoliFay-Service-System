@@ -111,11 +111,11 @@ export const AdminSecurityGate: React.FC<AdminSecurityGateProps> = ({
 
         {/* Crest & Header */}
         <div className="text-center space-y-2">
-          <div className="relative mx-auto w-20 h-20 rounded-full p-1 bg-gradient-to-tr from-amber-500 to-amber-200 shadow-xl shadow-amber-500/20">
+          <div className="relative mx-auto w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-amber-500 to-amber-200 shadow-xl shadow-amber-500/20">
             <img
               src={settings.logoUrl}
               alt="Police Crest"
-              className="w-full h-full rounded-full object-contain bg-slate-950 p-2"
+              className="w-full h-full rounded-full object-cover bg-slate-950"
             />
             <div className="absolute -bottom-1 -right-1 bg-rose-600 text-white p-1 rounded-full border-2 border-slate-900 shadow">
               <Lock className="w-3.5 h-3.5" />

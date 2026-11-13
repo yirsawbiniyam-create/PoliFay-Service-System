@@ -75,11 +75,11 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center justify-between gap-4 flex-wrap">
           {/* Logo & Commission Branding */}
           <div className="flex items-center gap-3.5 cursor-pointer" onClick={() => setCurrentTab('kiosk')}>
-            <div className="relative w-13 h-13 rounded-full p-0.5 bg-gradient-to-tr from-amber-500 to-amber-200 shadow-md shadow-amber-500/20 shrink-0">
+            <div className="relative w-16 h-16 rounded-full p-0.5 bg-gradient-to-tr from-amber-500 to-amber-200 shadow-md shadow-amber-500/20 overflow-hidden shrink-0">
               <img
                 src={settings.logoUrl}
                 alt="Police Commission Logo"
-                className="w-full h-full rounded-full object-contain bg-slate-950 p-1"
+                className="w-full h-full rounded-full object-cover bg-slate-950"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src =
                     'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=100&auto=format&fit=crop&q=80';

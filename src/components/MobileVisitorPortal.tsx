@@ -311,7 +311,7 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
           <img
             src={settings.logoUrl}
             alt="Logo"
-            className="w-10 h-10 rounded-full object-contain bg-slate-950 p-1 border border-amber-500/40"
+            className="w-12 h-12 rounded-full object-cover bg-slate-950 border-2 border-amber-500/50 shrink-0"
           />
           <div>
             <h1 className="text-sm font-extrabold text-amber-400 font-serif leading-tight">
@@ -651,7 +651,7 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
             <img
               src={settings.logoUrl}
               alt="Commission Logo"
-              className="w-20 h-20 rounded-full object-contain bg-slate-950 p-2 border-2 border-amber-400/60 shadow-2xl"
+              className="w-24 h-24 rounded-full object-cover bg-slate-950 border-2 border-amber-400/70 shadow-2xl"
             />
           </div>
 
@@ -910,7 +910,7 @@ export const MobileVisitorPortal: React.FC<MobileVisitorPortalProps> = ({
             <img
               src={settings.logoUrl}
               alt="Commission Logo"
-              className="w-20 h-20 rounded-full object-contain bg-slate-950 p-2 border-2 border-amber-400/60 shadow-2xl"
+              className="w-24 h-24 rounded-full object-cover bg-slate-950 border-2 border-amber-400/70 shadow-2xl"
             />
           </div>
 

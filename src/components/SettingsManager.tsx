@@ -219,7 +219,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ settings, onOp
                   <img
                     src={p.url}
                     alt={p.name}
-                    className="w-10 h-10 object-contain rounded-full bg-slate-900 p-0.5 shrink-0"
+                    className="w-12 h-12 object-cover rounded-full bg-slate-900 shrink-0"
                   />
                   <span className="text-xs font-bold text-white leading-tight">{p.name}</span>
                 </div>
@@ -234,11 +234,11 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ settings, onOp
                 placeholder="የሎጎ ምስል URL ወይም SVG..."
                 className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:ring-2 focus:ring-amber-500"
               />
-              <div className="w-12 h-12 rounded-xl bg-slate-950 border border-amber-500/40 p-1 flex items-center justify-center shrink-0">
+              <div className="w-14 h-14 rounded-full overflow-hidden bg-slate-950 border-2 border-amber-500/60 flex items-center justify-center shrink-0">
                 <img
                   src={logoUrl}
                   alt="Logo preview"
-                  className="w-full h-full object-contain rounded-full"
+                  className="w-full h-full object-cover rounded-full"
                 />
               </div>
             </div>
