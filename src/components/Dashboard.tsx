@@ -39,6 +39,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  ReferenceLine,
 } from 'recharts';
 import {
   Department,
@@ -48,8 +49,8 @@ import {
   FeedbackRecord,
   CommissionSettings,
 } from '../types';
-import { calculateDepartmentScores } from '../services/dbService';
-import { getFormattedDateLabels } from '../utils/ethiopianTime';
+import { calculateDepartmentScores, calculateStaffEvaluations } from '../services/dbService';
+import { getFormattedDateLabels, ETHIOPIAN_DAYS } from '../utils/ethiopianTime';
 
 interface DashboardProps {
   departments: Department[];
@@ -68,6 +69,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   visitors,
   feedbacks,
   settings,
+  onNavigateToTab,
 }) => {
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('all');
   const [timeFilter, setTimeFilter] = useState<'today' | 'week' | 'month' | 'all'>('today');
@@ -138,6 +140,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const departmentScores = useMemo(() => {
     return calculateDepartmentScores(departments, visitors, feedbacks, staffList, attendanceList);
   }, [departments, visitors, feedbacks, staffList, attendanceList]);
+
+  // Individual staff evaluations out of 100%
+  const staffEvaluations = useMemo(() => {
+    return calculateStaffEvaluations(staffList, departments, attendanceList, feedbacks);
+  }, [staffList, departments, attendanceList, feedbacks]);
 
   // Overall Commission metrics
   const totalStaffCount = staffList.length;
@@ -252,6 +259,92 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
     return activeDepts;
   }, [departments, todayVisitorsList, todayFeedbacksList]);
+
+  // Weekly Service Feedback Scores Trend (Past 7 Days - Recharts LineChart)
+  const [feedbackTrendMetric, setFeedbackTrendMetric] = useState<'score' | 'percentage'>('score');
+
+  const weeklyFeedbackTrendData = useMemo(() => {
+    const days: {
+      date: string;
+      shortDate: string;
+      dayName: string;
+      label: string;
+      avgScore: number | null;
+      satisfactionPct: number | null;
+      count: number;
+    }[] = [];
+
+    const baseDate = new Date();
+    for (let offset = 6; offset >= 0; offset--) {
+      const d = new Date(baseDate);
+      d.setDate(baseDate.getDate() - offset);
+      const yyyy = d.getFullYear();
+      const mm = (d.getMonth() + 1).toString().padStart(2, '0');
+      const dd = d.getDate().toString().padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      const dayName = ETHIOPIAN_DAYS[d.getDay()];
+      const shortDate = `${dd}/${mm}`;
+
+      const dayFeedbacks = feedbacks.filter((f) => {
+        if (selectedDeptFilter !== 'all' && f.departmentId !== selectedDeptFilter) return false;
+        const fbDate = f.date || (f.timestamp ? f.timestamp.slice(0, 10) : '');
+        return fbDate === dateStr;
+      });
+
+      const count = dayFeedbacks.length;
+      const sumScore = dayFeedbacks.reduce((acc, item) => acc + (Number(item.score) || 0), 0);
+      const avgScore = count > 0 ? Number((sumScore / count).toFixed(2)) : null;
+      const satisfactionPct = count > 0 ? Math.round((sumScore / (count * 5)) * 100) : null;
+
+      days.push({
+        date: dateStr,
+        shortDate,
+        dayName,
+        label: offset === 0 ? `ዛሬ (${shortDate})` : `${dayName} (${shortDate})`,
+        avgScore,
+        satisfactionPct,
+        count,
+      });
+    }
+
+    return days;
+  }, [feedbacks, selectedDeptFilter]);
+
+  const weeklyFeedbackSummary = useMemo(() => {
+    const totalCount = weeklyFeedbackTrendData.reduce((acc, d) => acc + d.count, 0);
+    const activeDays = weeklyFeedbackTrendData.filter((d) => d.count > 0 && d.avgScore !== null);
+
+    let weightedAvg = 0;
+    let weightedPct = 0;
+    if (totalCount > 0) {
+      const totalScoreSum = weeklyFeedbackTrendData.reduce(
+        (acc, d) => acc + (d.avgScore ? d.avgScore * d.count : 0),
+        0
+      );
+      weightedAvg = Number((totalScoreSum / totalCount).toFixed(2));
+      weightedPct = Math.round((totalScoreSum / (totalCount * 5)) * 100);
+    }
+
+    const bestDay = activeDays.length > 0
+      ? activeDays.reduce((best, curr) => ((curr.avgScore || 0) > (best.avgScore || 0) ? curr : best), activeDays[0])
+      : null;
+
+    let deltaScore: number | null = null;
+    if (activeDays.length >= 2) {
+      const first = activeDays[0].avgScore || 0;
+      const last = activeDays[activeDays.length - 1].avgScore || 0;
+      deltaScore = Number((last - first).toFixed(2));
+    }
+
+    return {
+      totalCount,
+      activeDaysCount: activeDays.length,
+      weightedAvg,
+      weightedPct,
+      bestDay,
+      deltaScore,
+    };
+  }, [weeklyFeedbackTrendData]);
 
   // Recharts Attendance & Time Distribution State & Computations
   const [attendanceChartTab, setAttendanceChartTab] = useState<'hourly' | 'weekly_trend' | 'punctuality' | 'department'>('hourly');
@@ -885,6 +978,211 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
 
+      {/* WEEKLY SERVICE FEEDBACK TREND LINE CHART (PAST 7 DAYS - RECHARTS) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5">
+        {/* Card Header & Metric Switcher */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+              <h2 className="text-lg sm:text-xl font-black text-white font-serif">
+                የሳምንቱ የአገልግሎት አስተያየት ውጤት አዝማሚያ (ባለፉት 7 ቀናት)
+              </h2>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 pl-0 sm:pl-11">
+              <span>{weeklyFeedbackTrendData[0]?.date} – {weeklyFeedbackTrendData[6]?.date}</span>
+              <span aria-hidden="true">·</span>
+              <span>{selectedDeptFilter === 'all' ? 'ሁሉም የስራ ክፍሎች' : departments.find((d) => d.id === selectedDeptFilter)?.name || 'የተመረጠ ክፍል'}</span>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono tabular-nums text-slate-300">{weeklyFeedbackSummary.totalCount} አስተያየቶች</span>
+            </div>
+          </div>
+
+          {/* Interactive Metric Switcher */}
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold self-start lg:self-auto">
+            <button
+              type="button"
+              onClick={() => setFeedbackTrendMetric('score')}
+              className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                feedbackTrendMetric === 'score'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              አማካይ ነጥብ (1–5)
+            </button>
+            <button
+              type="button"
+              onClick={() => setFeedbackTrendMetric('percentage')}
+              className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                feedbackTrendMetric === 'percentage'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              የእርካታ መቶኛ (%)
+            </button>
+          </div>
+        </div>
+
+        {/* 7-Day Feedback KPI Strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5">
+            <span className="text-[11px] font-bold text-slate-400 block">የ 7 ቀን አማካይ ነጥብ</span>
+            <div className="text-2xl font-black text-amber-400 font-mono tabular-nums mt-0.5">
+              {weeklyFeedbackSummary.totalCount > 0 ? `${weeklyFeedbackSummary.weightedAvg} / 5` : '—'}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">ከ 5.0 ከፍተኛ ነጥብ</span>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5">
+            <span className="text-[11px] font-bold text-slate-400 block">የ 7 ቀን የእርካታ መቶኛ</span>
+            <div className="text-2xl font-black text-emerald-400 font-mono tabular-nums mt-0.5">
+              {weeklyFeedbackSummary.totalCount > 0 ? `${weeklyFeedbackSummary.weightedPct}%` : '—'}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">ጠቅላላ የአገልግሎት እርካታ</span>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5">
+            <span className="text-[11px] font-bold text-slate-400 block">የተሰበሰቡ አስተያየቶች</span>
+            <div className="text-2xl font-black text-white font-mono tabular-nums mt-0.5">
+              {weeklyFeedbackSummary.totalCount}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">
+              ባለፉት {weeklyFeedbackSummary.activeDaysCount} ንቁ ቀናት ውስጥ
+            </span>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5">
+            <span className="text-[11px] font-bold text-slate-400 block">ሳምንታዊ ለውጥ (Trend)</span>
+            <div
+              className={`text-2xl font-black font-mono tabular-nums mt-0.5 ${
+                weeklyFeedbackSummary.deltaScore === null
+                  ? 'text-slate-400'
+                  : weeklyFeedbackSummary.deltaScore >= 0
+                  ? 'text-emerald-400'
+                  : 'text-rose-400'
+              }`}
+            >
+              {weeklyFeedbackSummary.deltaScore === null
+                ? '—'
+                : `${weeklyFeedbackSummary.deltaScore >= 0 ? '+' : ''}${weeklyFeedbackSummary.deltaScore}`}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block truncate">
+              {weeklyFeedbackSummary.bestDay
+                ? `ከፍተኛ ቀን፡ ${weeklyFeedbackSummary.bestDay.label}`
+                : 'ቢያንስ 2 ቀናት ሲሞሉ ይሰላል'}
+            </span>
+          </div>
+        </div>
+
+        {/* Recharts LineChart Container */}
+        <div className="bg-slate-950/70 border border-slate-800/90 rounded-2xl p-4 sm:p-5 space-y-3">
+          {weeklyFeedbackSummary.totalCount === 0 ? (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80 text-xs text-amber-300/90">
+              <span>ባለፉት 7 ቀናት ውስጥ የተመዘገበ የአገልግሎት አስተያየት የለም። ባለጉዳዮች ደረጃ ሲሰጡ ዕለታዊ አዝማሚያው በቀጥታ ይሳላል።</span>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="font-bold text-white">
+                {feedbackTrendMetric === 'score'
+                  ? 'ዕለታዊ አማካይ የአገልግሎት ደረጃ (1.0 – 5.0)'
+                  : 'ዕለታዊ የባለጉዳይ እርካታ መቶኛ (0% – 100%)'}
+              </span>
+              <span className="text-[11px] text-slate-400">
+                የዒላማ መስመር (Target Benchmark): {feedbackTrendMetric === 'score' ? '4.0 / 5.0' : '80%'}
+              </span>
+            </div>
+          )}
+
+          <div className="h-72 sm:h-80 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={weeklyFeedbackTrendData}
+                margin={{ top: 18, right: 20, left: -10, bottom: 10 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  stroke="#94a3b8"
+                  fontSize={11}
+                  tick={{ fill: '#cbd5e1' }}
+                  tickLine={false}
+                />
+                <YAxis
+                  stroke="#94a3b8"
+                  fontSize={11}
+                  domain={feedbackTrendMetric === 'score' ? [0, 5] : [0, 100]}
+                  ticks={feedbackTrendMetric === 'score' ? [0, 1, 2, 3, 4, 5] : [0, 20, 40, 60, 80, 100]}
+                  tickFormatter={(val) => (feedbackTrendMetric === 'score' ? `${val}` : `${val}%`)}
+                  tick={{ fill: '#94a3b8' }}
+                  tickLine={false}
+                />
+                <ReferenceLine
+                  y={feedbackTrendMetric === 'score' ? 4 : 80}
+                  stroke="#10b981"
+                  strokeDasharray="5 5"
+                  strokeOpacity={0.6}
+                />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-2xl text-xs space-y-1.5">
+                          <p className="font-bold text-white border-b border-slate-800 pb-1">
+                            {data.label} · {data.date}
+                          </p>
+                          {data.count > 0 ? (
+                            <>
+                              <div className="flex justify-between gap-4 text-amber-400">
+                                <span>አማካይ ነጥብ፡</span>
+                                <span className="font-mono tabular-nums font-bold">{data.avgScore} / 5.0</span>
+                              </div>
+                              <div className="flex justify-between gap-4 text-emerald-400">
+                                <span>የእርካታ መቶኛ፡</span>
+                                <span className="font-mono tabular-nums font-bold">{data.satisfactionPct}%</span>
+                              </div>
+                              <div className="flex justify-between gap-4 text-slate-300 pt-1 border-t border-slate-800">
+                                <span>የተሰጡ አስተያየቶች፡</span>
+                                <span className="font-mono tabular-nums font-bold">{data.count}</span>
+                              </div>
+                            </>
+                          ) : (
+                            <p className="text-slate-400">በዚህ ቀን የተመዘገበ አስተያየት የለም (0)</p>
+                          )}
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Legend
+                  wrapperStyle={{ paddingTop: '12px', fontSize: '12px' }}
+                  formatter={(value) => <span className="text-slate-300 font-medium">{value}</span>}
+                />
+                <Line
+                  type="monotone"
+                  dataKey={feedbackTrendMetric === 'score' ? 'avgScore' : 'satisfactionPct'}
+                  name={
+                    feedbackTrendMetric === 'score'
+                      ? 'ዕለታዊ አማካይ ነጥብ (ከ 5)'
+                      : 'ዕለታዊ የእርካታ መቶኛ (%)'
+                  }
+                  stroke="#f59e0b"
+                  strokeWidth={3}
+                  connectNulls={true}
+                  dot={{ r: 5, fill: '#f59e0b', stroke: '#0f172a', strokeWidth: 2 }}
+                  activeDot={{ r: 7, fill: '#10b981', stroke: '#ffffff', strokeWidth: 2 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
       {/* NEW: Staff Daily Check-In & Check-Out Time Usage Section (Recharts) */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5">
         {/* Header & Sub-nav tabs */}
@@ -1451,6 +1749,92 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Top Ranked Staff Evaluation Preview Card */}
+      <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Award className="w-5 h-5 text-amber-400" />
+              <h3 className="font-extrabold text-base sm:text-lg text-white">
+                የሰራተኞች የአፈጻጸም ምዘና — ከ1ኛ እስከ 5ኛ (ከ 100%)
+              </h3>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              በተገልጋይ አስተያየት፣ በመግቢያ እና በመውጫ ሰዓት መሰረት የተሰላ የሁሉም ሰራተኞች ደረጃ
+            </p>
+          </div>
+          {onNavigateToTab && (
+            <button
+              onClick={() => onNavigateToTab('departments')}
+              className="flex items-center gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-bold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <span>ሁሉንም ደረጃና ማወዳደሪያ ክፈት</span>
+              <ArrowUpRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+          {staffEvaluations.slice(0, 5).map((ev) => (
+            <div
+              key={ev.staff.id}
+              className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between gap-2.5"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  className={`px-2 py-0.5 rounded-lg font-black text-xs font-mono tabular-nums ${
+                    ev.overallRank === 1
+                      ? 'bg-amber-400 text-slate-950'
+                      : ev.overallRank === 2
+                      ? 'bg-slate-300 text-slate-950'
+                      : ev.overallRank === 3
+                      ? 'bg-amber-700 text-white'
+                      : 'bg-slate-800 text-slate-300'
+                  }`}
+                >
+                  {ev.overallRank}ኛ
+                </span>
+                <span className="text-sm font-black font-mono tabular-nums text-emerald-400">
+                  {ev.overallScore}%
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <img
+                  src={
+                    ev.staff.photoUrl ||
+                    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80'
+                  }
+                  alt={ev.staff.fullName}
+                  className="w-9 h-9 rounded-full object-cover border border-amber-400/50 shrink-0"
+                />
+                <div className="min-w-0">
+                  <div className="font-bold text-white text-xs truncate">{ev.staff.fullName}</div>
+                  <div className="text-[10px] text-slate-400 truncate">
+                    {ev.departmentName} (በክፍሉ {ev.deptRank}ኛ)
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1 pt-2 border-t border-slate-800 text-[10px] text-center font-mono tabular-nums">
+                <div>
+                  <span className="text-slate-500 block font-sans">መግቢያ</span>
+                  <span className="text-emerald-400 font-bold">{ev.checkInScore}%</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block font-sans">መውጫ</span>
+                  <span className="text-cyan-400 font-bold">{ev.checkOutScore}%</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block font-sans">አስተያየት</span>
+                  <span className="text-amber-400 font-bold">{ev.feedbackScore}%</span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 

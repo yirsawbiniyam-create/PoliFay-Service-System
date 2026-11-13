@@ -154,11 +154,38 @@ export interface DepartmentScoreSummary {
   departmentId: string;
   departmentName: string;
   visitorCount: number;
+  feedbackCount?: number;
   averageRating: number; // 1 to 5
   satisfactionScore: number; // 0 to 100%
   staffCount: number;
   onDutyStaffCount: number;
+  checkInPunctualityScore?: number; // 0 to 100%
+  checkOutPunctualityScore?: number; // 0 to 100%
   punctualityScore: number; // 0 to 100%
   overallScore: number; // 0 to 100%
   rank?: number;
+}
+
+export interface StaffEvaluationSummary {
+  staff: Staff;
+  departmentId: string;
+  departmentName: string;
+  checkInScore: number; // 0 to 100
+  checkOutScore: number; // 0 to 100
+  punctualityScore: number; // 0 to 100
+  feedbackScore: number; // 0 to 100
+  averageRating: number; // 1 to 5
+  overallScore: number; // 0 to 100
+  attendanceCount: number;
+  onTimeCheckInCount: number;
+  lateCheckInCount: number;
+  completedCheckOutCount: number;
+  onTimeCheckOutCount: number;
+  earlyCheckOutCount: number;
+  deptFeedbackCount: number;
+  hasAttendanceData: boolean;
+  hasFeedbackData: boolean;
+  overallRank: number; // 1-based rank across all staff
+  deptRank: number; // 1-based rank within department
+  gradeLabel: string;
 }

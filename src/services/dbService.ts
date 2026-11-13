@@ -22,6 +22,7 @@ import {
   Announcement,
   CommissionSettings,
   DepartmentScoreSummary,
+  StaffEvaluationSummary,
 } from '../types';
 import {
   INITIAL_DEPARTMENTS,
@@ -1385,24 +1386,42 @@ export function calculateDepartmentScores(
       avgRating = sum / feedbackCount;
       satisfactionScore = Math.round((avgRating / 5) * 100);
     } else {
-      // If no feedbacks yet, show 100% or baseline
-      satisfactionScore = 90;
-      avgRating = 4.5;
+      satisfactionScore = 80;
+      avgRating = 4.0;
     }
 
-    // 2. Staff punctuality in this department
-    const deptStaff = staffList.filter((s) => s.departmentId === dept.id && s.active);
+    // 2. Staff check-in & check-out punctuality in this department
+    const deptStaff = staffList.filter((s) => s.departmentId === dept.id && s.active !== false);
     const onDutyStaff = deptStaff.filter((s) => s.status === 'on_duty');
     const deptAttendance = attendanceList.filter((a) => a.departmentId === dept.id);
 
-    let punctualityScore = 95;
+    let checkInPunctualityScore = 70;
+    let checkOutPunctualityScore = 70;
+    let punctualityScore = 70;
+
     if (deptAttendance.length > 0) {
-      const highPunctualityCount = deptAttendance.filter((a) => a.punctualityCheckIn === 'high').length;
-      punctualityScore = Math.round((highPunctualityCount / deptAttendance.length) * 100);
+      const highCheckInCount = deptAttendance.filter((a) => a.punctualityCheckIn === 'high').length;
+      checkInPunctualityScore = Math.round((highCheckInCount / deptAttendance.length) * 100);
+
+      const completedCheckOuts = deptAttendance.filter(
+        (a) => a.punctualityCheckOut && a.punctualityCheckOut !== 'pending'
+      );
+      if (completedCheckOuts.length > 0) {
+        const highCheckOutCount = completedCheckOuts.filter(
+          (a) => a.punctualityCheckOut === 'very_high'
+        ).length;
+        checkOutPunctualityScore = Math.round((highCheckOutCount / completedCheckOuts.length) * 100);
+        punctualityScore = Math.round(
+          checkInPunctualityScore * 0.55 + checkOutPunctualityScore * 0.45
+        );
+      } else {
+        checkOutPunctualityScore = checkInPunctualityScore;
+        punctualityScore = checkInPunctualityScore;
+      }
     }
 
-    // 3. Combined Overall Score: 60% visitor satisfaction + 40% staff punctuality
-    const overallScore = Math.min(100, Math.round(satisfactionScore * 0.6 + punctualityScore * 0.4));
+    // 3. Combined Overall Score: 55% visitor satisfaction + 45% staff check-in/out punctuality
+    const overallScore = Math.min(100, Math.round(satisfactionScore * 0.55 + punctualityScore * 0.45));
 
     const totalVisitors = visitors.filter((v) => v.departmentId === dept.id).length;
 
@@ -1410,18 +1429,173 @@ export function calculateDepartmentScores(
       departmentId: dept.id,
       departmentName: dept.name,
       visitorCount: totalVisitors,
+      feedbackCount,
       averageRating: Number(avgRating.toFixed(1)),
       satisfactionScore,
       staffCount: deptStaff.length,
       onDutyStaffCount: onDutyStaff.length,
+      checkInPunctualityScore,
+      checkOutPunctualityScore,
       punctualityScore,
       overallScore,
     };
   });
 
-  // Sort descending by overallScore and assign ranks
-  summaries.sort((a, b) => b.overallScore - a.overallScore);
+  // Sort descending by overallScore, then satisfaction, then feedbackCount
+  summaries.sort((a, b) => {
+    if (b.overallScore !== a.overallScore) return b.overallScore - a.overallScore;
+    if (b.satisfactionScore !== a.satisfactionScore) return b.satisfactionScore - a.satisfactionScore;
+    return (b.feedbackCount || 0) - (a.feedbackCount || 0);
+  });
   return summaries.map((s, idx) => ({ ...s, rank: idx + 1 }));
+}
+
+function getEvaluationGradeLabel(score: number): string {
+  if (score >= 90) return 'እጅግ በጣም የላቀ (A+)';
+  if (score >= 80) return 'በጣም ጥሩ (A)';
+  if (score >= 70) return 'ጥሩ (B)';
+  if (score >= 60) return 'አጥጋቢ (C)';
+  return 'መሻሻል የሚገባው (D)';
+}
+
+/**
+ * Staff Performance Evaluation & Ranking (out of 100%)
+ * Combines:
+ * - Service Feedback from Citizens for the staff's department (45%)
+ * - Check-In Punctuality (30%)
+ * - Check-Out Punctuality (25%)
+ * Produces both commission-wide rank (1ኛ..N) and within-department rank (1ኛ..M).
+ */
+export function calculateStaffEvaluations(
+  staffList: Staff[],
+  departments: Department[],
+  attendanceList: AttendanceRecord[],
+  feedbacks: FeedbackRecord[]
+): StaffEvaluationSummary[] {
+  const activeStaff = staffList.filter((s) => s.active !== false);
+
+  const rawEvaluations = activeStaff.map((staff) => {
+    const dept = departments.find((d) => d.id === staff.departmentId);
+    const deptName = dept?.name || staff.departmentName || 'የስራ ክፍል';
+
+    // Match attendance records by staffId or badgeNumber
+    const staffAtt = attendanceList.filter(
+      (a) =>
+        a.staffId === staff.id ||
+        (staff.badgeNumber &&
+          a.badgeNumber &&
+          a.badgeNumber.toUpperCase() === staff.badgeNumber.toUpperCase())
+    );
+
+    const attendanceCount = staffAtt.length;
+    const onTimeCheckInCount = staffAtt.filter((a) => a.punctualityCheckIn === 'high').length;
+    const lateCheckInCount = staffAtt.filter((a) => a.punctualityCheckIn === 'low').length;
+
+    const completedOuts = staffAtt.filter(
+      (a) => a.punctualityCheckOut && a.punctualityCheckOut !== 'pending'
+    );
+    const completedCheckOutCount = completedOuts.length;
+    const onTimeCheckOutCount = completedOuts.filter(
+      (a) => a.punctualityCheckOut === 'very_high'
+    ).length;
+    const earlyCheckOutCount = completedOuts.filter(
+      (a) => a.punctualityCheckOut === 'low'
+    ).length;
+
+    const hasAttendanceData = attendanceCount > 0;
+
+    // Check-In score (0 - 100)
+    const checkInScore = hasAttendanceData
+      ? Math.round((onTimeCheckInCount / attendanceCount) * 100)
+      : 65;
+
+    // Check-Out score (0 - 100)
+    const checkOutScore =
+      completedCheckOutCount > 0
+        ? Math.round((onTimeCheckOutCount / completedCheckOutCount) * 100)
+        : hasAttendanceData
+        ? staff.status === 'on_duty'
+          ? 85
+          : checkInScore
+        : 65;
+
+    // Combined punctuality score (0 - 100)
+    const punctualityScore = Math.round(checkInScore * 0.55 + checkOutScore * 0.45);
+
+    // Department citizen feedback score (0 - 100)
+    const deptFeedbacks = feedbacks.filter((f) => f.departmentId === staff.departmentId);
+    const deptFeedbackCount = deptFeedbacks.length;
+    const hasFeedbackData = deptFeedbackCount > 0;
+
+    let averageRating = 4.0;
+    let feedbackScore = 80;
+    if (hasFeedbackData) {
+      const totalRating = deptFeedbacks.reduce((sum, fb) => sum + fb.score, 0);
+      averageRating = Number((totalRating / deptFeedbackCount).toFixed(1));
+      feedbackScore = Math.round((totalRating / (deptFeedbackCount * 5)) * 100);
+    }
+
+    // Overall score out of 100%: 45% Feedback + 30% Check-In + 25% Check-Out
+    const overallScore = Math.min(
+      100,
+      Math.round(feedbackScore * 0.45 + checkInScore * 0.30 + checkOutScore * 0.25)
+    );
+
+    return {
+      staff,
+      departmentId: staff.departmentId,
+      departmentName: deptName,
+      checkInScore,
+      checkOutScore,
+      punctualityScore,
+      feedbackScore,
+      averageRating,
+      overallScore,
+      attendanceCount,
+      onTimeCheckInCount,
+      lateCheckInCount,
+      completedCheckOutCount,
+      onTimeCheckOutCount,
+      earlyCheckOutCount,
+      deptFeedbackCount,
+      hasAttendanceData,
+      hasFeedbackData,
+      overallRank: 0,
+      deptRank: 0,
+      gradeLabel: getEvaluationGradeLabel(overallScore),
+    };
+  });
+
+  const compareEvaluations = (a: StaffEvaluationSummary, b: StaffEvaluationSummary) => {
+    if (b.overallScore !== a.overallScore) return b.overallScore - a.overallScore;
+    if (b.hasAttendanceData !== a.hasAttendanceData) return b.hasAttendanceData ? 1 : -1;
+    if (b.attendanceCount !== a.attendanceCount) return b.attendanceCount - a.attendanceCount;
+    if (b.punctualityScore !== a.punctualityScore) return b.punctualityScore - a.punctualityScore;
+    return a.staff.fullName.localeCompare(b.staff.fullName);
+  };
+
+  // Assign overall commission-wide ranks (1ኛ..N)
+  const overallSorted = [...rawEvaluations].sort(compareEvaluations);
+  overallSorted.forEach((item, idx) => {
+    item.overallRank = idx + 1;
+  });
+
+  // Assign per-department ranks (1ኛ..M)
+  const deptGroups = new Map<string, StaffEvaluationSummary[]>();
+  overallSorted.forEach((item) => {
+    const arr = deptGroups.get(item.departmentId) || [];
+    arr.push(item);
+    deptGroups.set(item.departmentId, arr);
+  });
+
+  deptGroups.forEach((group) => {
+    group.sort(compareEvaluations);
+    group.forEach((item, idx) => {
+      item.deptRank = idx + 1;
+    });
+  });
+
+  return overallSorted;
 }
 
 /**

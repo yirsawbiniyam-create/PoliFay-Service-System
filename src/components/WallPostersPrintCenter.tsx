@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Printer,
-  QrCode,
-  Building2,
-  Users,
-  HeartHandshake,
   Smartphone,
   ExternalLink,
-  Download,
   Check,
   Eye,
   Info,
+  Maximize2,
+  Minimize2,
+  Columns2,
+  Shield,
+  Users,
 } from 'lucide-react';
 import { Department, CommissionSettings } from '../types';
 
@@ -26,8 +26,9 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
   onOpenMobilePortal,
 }) => {
   const [selectedDeptId, setSelectedDeptId] = useState<string>('all');
-  const [posterType, setPosterType] = useState<'both' | 'staff' | 'visitor'>('both');
+  const [posterType, setPosterType] = useState<'side_by_side' | 'both' | 'staff' | 'visitor'>('side_by_side');
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [fullscreenDept, setFullscreenDept] = useState<Department | null>(null);
 
   const baseUrl = typeof window !== 'undefined'
     ? `${window.location.origin}${window.location.pathname}`
@@ -43,33 +44,231 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
     setTimeout(() => setCopiedUrl(null), 2000);
   };
 
+  const enterQrFullscreen = useCallback((dept: Department) => {
+    setFullscreenDept(dept);
+    if (typeof document !== 'undefined' && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {
+        // Fallback: fixed full-viewport overlay still works inside restricted iframes
+      });
+    }
+  }, []);
+
+  const exitQrFullscreen = useCallback(() => {
+    setFullscreenDept(null);
+    if (typeof document !== 'undefined' && document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setFullscreenDept(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setFullscreenDept(null);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   const filteredDepts = selectedDeptId === 'all'
     ? departments
     : departments.filter((d) => d.id === selectedDeptId);
 
+  const activeTargetDept =
+    selectedDeptId !== 'all'
+      ? departments.find((d) => d.id === selectedDeptId) || departments[0]
+      : departments.find((d) => d.active) || departments[0];
+
+  const mottoRaw = (settings.motto || 'በሰብዓዊነት ማገልገል በጀግንነት መጠበቅ').replace(/[«»"]/g, '').trim();
+  const hasSplitMotto =
+    mottoRaw.includes('በሰብዓዊነት ማገልገል') && mottoRaw.includes('በጀግንነት መጠበቅ');
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {/* FULLSCREEN QR-ONLY DISPLAY OVERLAY */}
+      {fullscreenDept && (() => {
+        const fsStaffUrl = `${baseUrl}?portal=staff&dept=${fullscreenDept.id}`;
+        const fsVisitorUrl = `${baseUrl}?portal=visitor&dept=${fullscreenDept.id}`;
+        const fsStaffQr = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=12&data=${encodeURIComponent(fsStaffUrl)}`;
+        const fsVisitorQr = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=12&data=${encodeURIComponent(fsVisitorUrl)}`;
+
+        return (
+          <div className="fixed inset-0 z-[120] bg-slate-950 text-white flex flex-col justify-between overflow-hidden select-none print:hidden">
+            {/* Subtle Ambient Radial Glow */}
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_22%_50%,rgba(245,158,11,0.12),transparent_42%),radial-gradient(circle_at_78%_50%,rgba(16,185,129,0.12),transparent_42%),radial-gradient(circle_at_50%_50%,rgba(251,191,36,0.08),transparent_36%)]" />
+
+            {/* Top Ethiopian Tricolor Accent Hairline */}
+            <div className="relative z-10 h-1.5 w-full flex shrink-0">
+              <div className="h-full w-1/3 bg-emerald-500" />
+              <div className="h-full w-1/3 bg-amber-400" />
+              <div className="h-full w-1/3 bg-rose-600" />
+            </div>
+
+            {/* Discreet Exit Fullscreen Button (reveals brightly on hover) */}
+            <button
+              onClick={exitQrFullscreen}
+              title="ከሙሉ ስክሪን ውጣ (Esc)"
+              className="fixed top-4 right-4 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 border border-slate-700/70 text-slate-300 hover:text-white text-xs font-bold opacity-35 hover:opacity-100 transition-opacity cursor-pointer"
+            >
+              <Minimize2 className="w-4 h-4 text-amber-400" />
+              <span className="whitespace-nowrap">ከሙሉ ስክሪን ውጣ (Esc)</span>
+            </button>
+
+            {/* Main Side-by-Side QR Stage: Left Staff QR | Center Logo + Motto | Right Visitor QR */}
+            <div className="relative z-10 flex-1 grid grid-cols-1 md:grid-cols-11 items-center gap-6 px-6 sm:px-10 lg:px-16 py-6">
+              {/* LEFT: LARGE STAFF QR CODE */}
+              <div className="md:col-span-4 flex flex-col items-center justify-center text-center">
+                <div className="mb-4">
+                  <div className="inline-flex items-center gap-2 text-amber-400 font-black text-lg sm:text-xl lg:text-2xl font-serif tracking-wide">
+                    <Shield className="w-6 h-6 text-amber-400 shrink-0" />
+                    <span>የሰራተኞች መግቢያና መውጫ</span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1">
+                    {fullscreenDept.name}
+                    {fullscreenDept.roomNumber ? ` • ${fullscreenDept.roomNumber}` : ''}
+                  </p>
+                </div>
+
+                <div className="bg-white p-4 sm:p-5 rounded-3xl border-4 border-amber-400 shadow-[0_0_55px_rgba(245,158,11,0.22)]">
+                  <img
+                    src={fsStaffQr}
+                    alt="የሰራተኞች መግቢያና መውጫ QR ኮድ"
+                    className="w-56 h-56 sm:w-64 sm:h-64 lg:w-80 lg:h-80 xl:w-[360px] xl:h-[360px] object-contain"
+                  />
+                </div>
+
+                <p className="mt-4 text-xs sm:text-sm font-bold text-amber-300/90 tracking-wide">
+                  በስልክዎ ካሜራ ስካን ያድርጉ
+                </p>
+              </div>
+
+              {/* CENTER: POLICE COMMISSION LOGO + VIBRANT MOTTO DIVIDER */}
+              <div className="md:col-span-3 flex flex-col items-center justify-center text-center px-2">
+                {/* Top Vertical Luminous Divider Line */}
+                <div className="hidden md:block w-px h-14 lg:h-20 bg-gradient-to-b from-transparent via-amber-400/70 to-amber-300 mb-5" />
+
+                {/* Glowing Commission Logo */}
+                <div className="relative flex items-center justify-center mb-5">
+                  <div className="absolute -inset-3 rounded-full bg-gradient-to-tr from-emerald-500/25 via-amber-400/30 to-rose-500/25 blur-xl" />
+                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 lg:w-40 lg:h-40 rounded-full p-1.5 bg-gradient-to-b from-amber-300 via-amber-500 to-emerald-500 shadow-2xl">
+                    <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center p-2.5">
+                      <img
+                        src={settings.logoUrl}
+                        alt="የፖሊስ ኮሚሽን ሎጎ"
+                        className="w-full h-full object-contain drop-shadow-[0_4px_12px_rgba(251,191,36,0.35)]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Styled Motto directly below Logo */}
+                <div className="space-y-1.5">
+                  {hasSplitMotto ? (
+                    <>
+                      <p className="text-xl sm:text-2xl lg:text-[26px] font-black font-serif leading-snug bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(245,158,11,0.35)]">
+                        በሰብዓዊነት ማገልገል
+                      </p>
+                      <p className="text-xl sm:text-2xl lg:text-[26px] font-black font-serif leading-snug bg-gradient-to-r from-emerald-300 via-teal-200 to-cyan-300 bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(16,185,129,0.35)]">
+                        በጀግንነት መጠበቅ
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xl sm:text-2xl lg:text-[26px] font-black font-serif leading-snug bg-gradient-to-r from-amber-300 via-emerald-300 to-cyan-300 bg-clip-text text-transparent">
+                      {mottoRaw}
+                    </p>
+                  )}
+
+                  {/* Subtle Ethiopian Flag Accent Bar under Motto */}
+                  <div className="pt-2 flex items-center justify-center">
+                    <div className="h-1 w-32 rounded-full overflow-hidden flex shadow-md">
+                      <div className="w-1/3 h-full bg-emerald-500" />
+                      <div className="w-1/3 h-full bg-amber-400" />
+                      <div className="w-1/3 h-full bg-rose-500" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Vertical Luminous Divider Line */}
+                <div className="hidden md:block w-px h-14 lg:h-20 bg-gradient-to-t from-transparent via-emerald-400/70 to-emerald-300 mt-5" />
+              </div>
+
+              {/* RIGHT: LARGE VISITOR QR CODE */}
+              <div className="md:col-span-4 flex flex-col items-center justify-center text-center">
+                <div className="mb-4">
+                  <div className="inline-flex items-center gap-2 text-emerald-400 font-black text-lg sm:text-xl lg:text-2xl font-serif tracking-wide">
+                    <Users className="w-6 h-6 text-emerald-400 shrink-0" />
+                    <span>የባለጉዳዮች መስተንግዶና አስተያየት</span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1">
+                    {fullscreenDept.name}
+                    {fullscreenDept.roomNumber ? ` • ${fullscreenDept.roomNumber}` : ''}
+                  </p>
+                </div>
+
+                <div className="bg-white p-4 sm:p-5 rounded-3xl border-4 border-emerald-400 shadow-[0_0_55px_rgba(16,185,129,0.22)]">
+                  <img
+                    src={fsVisitorQr}
+                    alt="የባለጉዳዮች መስተንግዶና አስተያየት QR ኮድ"
+                    className="w-56 h-56 sm:w-64 sm:h-64 lg:w-80 lg:h-80 xl:w-[360px] xl:h-[360px] object-contain"
+                  />
+                </div>
+
+                <p className="mt-4 text-xs sm:text-sm font-bold text-emerald-300/90 tracking-wide">
+                  በስልክዎ ካሜራ ስካን ያድርጉ
+                </p>
+              </div>
+            </div>
+
+            {/* Bottom Ethiopian Tricolor Accent Hairline */}
+            <div className="relative z-10 h-1.5 w-full flex shrink-0">
+              <div className="h-full w-1/3 bg-emerald-500" />
+              <div className="h-full w-1/3 bg-amber-400" />
+              <div className="h-full w-1/3 bg-rose-600" />
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Non-printable Control Header */}
       <div className="print:hidden flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-xl">
         <div>
           <div className="flex items-center gap-2">
             <Printer className="w-6 h-6 text-amber-400" />
             <h1 className="text-xl sm:text-2xl font-black text-white font-serif">
-              በግድግዳ ላይ የሚለጠፉ የኪው አር ኮድ ፖስተሮች ማተሚያ (Wall QR Posters)
+              የኪው አር ኮድ ስክሪን እና የግድግዳ ፖስተሮች (Wall QR Posters)
             </h1>
           </div>
           <p className="text-xs text-slate-300 mt-1 max-w-2xl">
-            ቀደም ሲል በታብሌት ስካን ይደረግ የነበረው ተቀይሮ አድሚኑ ለእያንዳንዱ የስራ ክፍል የሚለጠፉ ፖስተሮችን ፕሪንት ያደርጋል። ሰራተኞችና ባለጉዳዮች በስልካቸው ካሜራ ስካን ያደርጋሉ።
+            የሰራተኛውንና የባለጉዳዩን ኪው አር ኮድ ጎን ለጎን በአንድ ስክሪን ወይም በሙሉ ስክሪን (QR ብቻ) ማሳየት እንዲሁም ለግድግዳ ፖስተር ማተም ይችላሉ።
           </p>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {activeTargetDept && (
+            <button
+              onClick={() => enterQrFullscreen(activeTargetDept)}
+              className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black px-4 py-2.5 rounded-xl text-sm shadow-xl transition-all cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <Maximize2 className="w-4 h-4" />
+              <span>ሙሉ ስክሪን (QR ብቻ)</span>
+            </button>
+          )}
+
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black px-5 py-2.5 rounded-xl text-sm shadow-xl transition-all cursor-pointer"
+            className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black px-5 py-2.5 rounded-xl text-sm shadow-xl transition-all cursor-pointer whitespace-nowrap shrink-0"
           >
             <Printer className="w-4 h-4" />
-            <span>ፖስተሮችን ፕሪንት አድርግ (Print A4)</span>
+            <span>ፖስተሮችን ፕሪንት አድርግ (A4)</span>
           </button>
         </div>
       </div>
@@ -96,38 +295,209 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
 
         <div>
           <label className="block text-slate-300 font-bold mb-1">
-            የሚታተመው የፖስተር ዓይነት፡
+            የአቀማመጥ እና የፖስተር ዓይነት፡
           </label>
           <select
             value={posterType}
-            onChange={(e) => setPosterType(e.target.value as any)}
+            onChange={(e) => setPosterType(e.target.value as 'side_by_side' | 'both' | 'staff' | 'visitor')}
             className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none"
           >
-            <option value="both">ሁለቱንም ፖስተሮች (የሰራተኞች + የባለጉዳዮች)</option>
+            <option value="side_by_side">ጎን ለጎን በአንድ ስክሪን (የሰራተኛ + ሎጎ + የባለጉዳይ)</option>
+            <option value="both">ሁለቱንም ፖስተሮች በተናጠል (Print A4)</option>
             <option value="staff">የሰራተኞች መግቢያ እና መውጫ ብቻ</option>
             <option value="visitor">የባለጉዳዮች መስተንግዶ እና አስተያየት ብቻ</option>
           </select>
         </div>
 
         <div className="flex flex-col justify-end">
-          <div className="text-[11px] text-amber-300/80 bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg flex items-center gap-1.5">
+          <div className="text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg flex items-center gap-1.5">
             <Info className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>በቀጥታ በስልክ ካሜራ ስካን ሲያደርጉ ወደ ትክክለኛው ፖርታል ይወስዳል!</span>
+            <span>በአንድ ስክሪን ጎን ለጎን ወይም «ሙሉ ስክሪን» ሲደረግ ሁለቱ ኪው አር ኮዶችና ሎጎው ብቻ በትልቁ ይታያሉ!</span>
           </div>
         </div>
       </div>
 
-      {/* Printable Posters Canvas */}
-      <div className="space-y-12">
+      {/* Posters / Side-by-Side Display Canvas */}
+      <div className="space-y-10">
         {filteredDepts.map((dept) => {
           const staffPortalUrl = `${baseUrl}?portal=staff&dept=${dept.id}`;
           const visitorPortalUrl = `${baseUrl}?portal=visitor&dept=${dept.id}`;
 
-          const staffQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&margin=12&data=${encodeURIComponent(staffPortalUrl)}`;
-          const visitorQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&margin=12&data=${encodeURIComponent(visitorPortalUrl)}`;
+          const staffQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&margin=12&data=${encodeURIComponent(staffPortalUrl)}`;
+          const visitorQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&margin=12&data=${encodeURIComponent(visitorPortalUrl)}`;
 
           return (
             <div key={dept.id} className="space-y-8">
+              {/* MODE A: SIDE-BY-SIDE ON ONE SCREEN (Staff QR | Police Logo + Motto | Visitor QR) */}
+              {posterType === 'side_by_side' && (
+                <div className="bg-slate-900 border border-slate-700/80 rounded-3xl overflow-hidden shadow-2xl break-after-page print:bg-white print:text-slate-950 print:border-2 print:border-slate-900 print:shadow-none">
+                  {/* Top Ethiopian Tricolor Accent */}
+                  <div className="h-2 w-full flex">
+                    <div className="h-full w-1/3 bg-emerald-600" />
+                    <div className="h-full w-1/3 bg-yellow-400" />
+                    <div className="h-full w-1/3 bg-rose-600" />
+                  </div>
+
+                  {/* Card Top Department Bar + Quick Fullscreen Trigger */}
+                  <div className="px-6 py-4 bg-slate-950/70 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:bg-slate-100 print:border-slate-300">
+                    <div className="flex items-center gap-3">
+                      <Columns2 className="w-5 h-5 text-amber-400 shrink-0 print:text-slate-800" />
+                      <div>
+                        <h2 className="text-base sm:text-lg font-black text-white font-serif print:text-slate-950">
+                          {dept.name}
+                        </h2>
+                        <p className="text-xs text-slate-400 font-mono print:text-slate-600">
+                          {settings.commissionName} • ኮድ: {dept.code}
+                          {dept.roomNumber ? ` • ${dept.roomNumber}` : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => enterQrFullscreen(dept)}
+                      className="print:hidden flex items-center gap-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                      <span>ይህን ክፍል በሙሉ ስክሪን ክፈት (QR ብቻ)</span>
+                    </button>
+                  </div>
+
+                  {/* 3-Column Side-by-Side QR Stage */}
+                  <div className="p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-11 items-center gap-6">
+                    {/* LEFT: STAFF QR CODE */}
+                    <div className="lg:col-span-4 bg-slate-950/80 border border-amber-500/30 rounded-2xl p-5 flex flex-col items-center text-center print:bg-slate-50 print:border-slate-300">
+                      <div className="flex items-center gap-2 text-amber-400 font-black text-base sm:text-lg font-serif mb-1 print:text-slate-900">
+                        <Shield className="w-5 h-5 shrink-0" />
+                        <span>የሰራተኞች መግቢያና መውጫ</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mb-4 print:text-slate-600">
+                        STAFF ATTENDANCE PORTAL QR
+                      </p>
+
+                      <div className="bg-white p-3.5 rounded-2xl border-2 border-amber-400 shadow-lg">
+                        <img
+                          src={staffQrUrl}
+                          alt="Staff Attendance QR Code"
+                          className="w-52 h-52 sm:w-60 sm:h-60 object-contain"
+                        />
+                      </div>
+
+                      <p className="text-xs text-slate-300 mt-3 font-medium print:text-slate-700">
+                        ሰራተኞች በስልካቸው ካሜራ ስካን በማድረግ መግቢያና መውጫ ያስመዝግቡ
+                      </p>
+
+                      <div className="print:hidden mt-4 pt-3 border-t border-slate-800 w-full flex items-center justify-between gap-2 text-xs">
+                        <button
+                          onClick={() => onOpenMobilePortal && onOpenMobilePortal('staff', dept.id)}
+                          className="flex items-center gap-1.5 text-amber-300 hover:text-amber-200 font-bold cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>ሞክር</span>
+                        </button>
+                        <button
+                          onClick={() => copyToClipboard(staffPortalUrl)}
+                          className="flex items-center gap-1 text-slate-400 hover:text-white font-mono cursor-pointer"
+                        >
+                          {copiedUrl === staffPortalUrl ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          )}
+                          <span>ሊንክ ኮፒ</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* CENTER: POLICE COMMISSION LOGO + VIBRANT MOTTO */}
+                    <div className="lg:col-span-3 flex flex-col items-center justify-center text-center py-4 px-2">
+                      <div className="hidden lg:block w-px h-10 bg-gradient-to-b from-transparent to-amber-400/60 mb-4" />
+
+                      <div className="relative mb-4">
+                        <div className="absolute -inset-2 rounded-full bg-gradient-to-tr from-emerald-500/20 via-amber-400/25 to-rose-500/20 blur-lg print:hidden" />
+                        <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-gradient-to-b from-amber-300 via-amber-500 to-emerald-500 shadow-xl">
+                          <div className="w-full h-full rounded-full bg-slate-950 print:bg-white flex items-center justify-center p-2">
+                            <img
+                              src={settings.logoUrl}
+                              alt="Commission Logo"
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        {hasSplitMotto ? (
+                          <>
+                            <p className="text-lg sm:text-xl font-black font-serif bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 bg-clip-text text-transparent print:text-amber-700 print:bg-none">
+                              በሰብዓዊነት ማገልገል
+                            </p>
+                            <p className="text-lg sm:text-xl font-black font-serif bg-gradient-to-r from-emerald-300 via-teal-200 to-cyan-300 bg-clip-text text-transparent print:text-emerald-700 print:bg-none">
+                              በጀግንነት መጠበቅ
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-lg sm:text-xl font-black font-serif bg-gradient-to-r from-amber-300 via-emerald-300 to-cyan-300 bg-clip-text text-transparent print:text-slate-900 print:bg-none">
+                            {mottoRaw}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="mt-3 h-1 w-24 rounded-full overflow-hidden flex">
+                        <div className="w-1/3 h-full bg-emerald-500" />
+                        <div className="w-1/3 h-full bg-amber-400" />
+                        <div className="w-1/3 h-full bg-rose-500" />
+                      </div>
+
+                      <div className="hidden lg:block w-px h-10 bg-gradient-to-t from-transparent to-emerald-400/60 mt-4" />
+                    </div>
+
+                    {/* RIGHT: VISITOR QR CODE */}
+                    <div className="lg:col-span-4 bg-slate-950/80 border border-emerald-500/30 rounded-2xl p-5 flex flex-col items-center text-center print:bg-slate-50 print:border-slate-300">
+                      <div className="flex items-center gap-2 text-emerald-400 font-black text-base sm:text-lg font-serif mb-1 print:text-emerald-900">
+                        <Users className="w-5 h-5 shrink-0" />
+                        <span>የባለጉዳዮች መስተንግዶና አስተያየት</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mb-4 print:text-slate-600">
+                        VISITOR SERVICE & FEEDBACK QR
+                      </p>
+
+                      <div className="bg-white p-3.5 rounded-2xl border-2 border-emerald-400 shadow-lg">
+                        <img
+                          src={visitorQrUrl}
+                          alt="Visitor Reception QR Code"
+                          className="w-52 h-52 sm:w-60 sm:h-60 object-contain"
+                        />
+                      </div>
+
+                      <p className="text-xs text-slate-300 mt-3 font-medium print:text-slate-700">
+                        ክቡራን ባለጉዳዮች በስልክዎ ካሜራ ስካን በማድረግ ይመዝገቡና አስተያየት ይስጡ
+                      </p>
+
+                      <div className="print:hidden mt-4 pt-3 border-t border-slate-800 w-full flex items-center justify-between gap-2 text-xs">
+                        <button
+                          onClick={() => onOpenMobilePortal && onOpenMobilePortal('visitor', dept.id)}
+                          className="flex items-center gap-1.5 text-emerald-300 hover:text-emerald-200 font-bold cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>ሞክር</span>
+                        </button>
+                        <button
+                          onClick={() => copyToClipboard(visitorPortalUrl)}
+                          className="flex items-center gap-1 text-slate-400 hover:text-white font-mono cursor-pointer"
+                        >
+                          {copiedUrl === visitorPortalUrl ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          )}
+                          <span>ሊንክ ኮፒ</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* POSTER 1: STAFF ATTENDANCE (የሰራተኞች መግቢያና መውጫ ፖስተር) */}
               {(posterType === 'both' || posterType === 'staff') && (
                 <div className="bg-white text-slate-950 rounded-3xl p-8 border-4 border-slate-900 shadow-2xl max-w-3xl mx-auto break-after-page print:p-6 print:border-2 print:shadow-none print:m-0 print:w-full">

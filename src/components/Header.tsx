@@ -266,7 +266,7 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <Building2 className="w-4 h-4" />
-            <span>የስራ ክፍሎች ደረጃ (100%)</span>
+            <span>የክፍሎችና ሰራተኞች ምዘና (100%)</span>
           </button>
 
           <button
