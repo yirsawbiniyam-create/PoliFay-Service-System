@@ -13,6 +13,10 @@ import {
   Users,
 } from 'lucide-react';
 import { Department, CommissionSettings } from '../types';
+import {
+  ETHIOPIAN_FLAG_SVG,
+  BENISHANGUL_GUMUZ_FLAG_SVG,
+} from '../data/initialData';
 
 interface WallPostersPrintCenterProps {
   departments: Department[];
@@ -92,9 +96,62 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
   const hasSplitMotto =
     mottoRaw.includes('በሰብዓዊነት ማገልገል') && mottoRaw.includes('በጀግንነት መጠበቅ');
 
+  const regionalFlagSrc = settings.regionalFlagUrl || BENISHANGUL_GUMUZ_FLAG_SVG;
+  const ethiopianFlagSrc = settings.flagUrl || ETHIOPIAN_FLAG_SVG;
+
+  // Shared Formal A4 Printable Poster Header:
+  // Left: Benishangul-Gumuz Flag | Center: Police Logo + Amharic & English System Name below it | Right: Ethiopian Flag
+  const renderPrintableHeader = () => (
+    <div className="border-b-2 border-slate-300 pb-4 mb-5">
+      <div className="grid grid-cols-12 items-center gap-3">
+        {/* LEFT: Benishangul-Gumuz Regional Flag */}
+        <div className="col-span-3 flex flex-col items-center justify-center text-center">
+          <img
+            src={regionalFlagSrc}
+            alt="የቤኒሻንጉል ጉሙዝ ክልል ሰንደቅ ዓላማ"
+            className="h-12 w-20 sm:h-14 sm:w-24 object-cover rounded shadow-sm border border-slate-300"
+          />
+          <span className="text-[10px] font-bold text-slate-700 mt-1 leading-tight">
+            የቤ/ጉሙዝ ክልል ሰንደቅ ዓላማ
+          </span>
+        </div>
+
+        {/* CENTER: Police Commission Logo + System Name (Amharic & English) directly below */}
+        <div className="col-span-6 flex flex-col items-center justify-center text-center">
+          <img
+            src={settings.logoUrl}
+            alt="የፖሊስ ኮሚሽን ሎጎ"
+            className="w-16 h-16 sm:w-20 sm:h-20 object-contain mb-1.5"
+          />
+          <p className="text-xs sm:text-sm font-extrabold text-slate-700 leading-tight">
+            {settings.commissionName || 'የቤኒሻንጉል ጉሙዝ ክልል ፖሊስ ኮሚሽን'}
+          </p>
+          <h2 className="text-base sm:text-xl font-black text-slate-950 font-serif leading-tight mt-0.5">
+            የፖሊስ እና የፋይዳ ዲጂታል መስተንግዶ ሲስተም
+          </h2>
+          <p className="text-[10px] sm:text-xs font-extrabold text-slate-700 tracking-wide uppercase mt-0.5">
+            POLICE &amp; FAYDA DIGITAL HOSPITALITY SYSTEM
+          </p>
+        </div>
+
+        {/* RIGHT: Ethiopian National Flag */}
+        <div className="col-span-3 flex flex-col items-center justify-center text-center">
+          <img
+            src={ethiopianFlagSrc}
+            alt="የኢትዮጵያ ሰንደቅ ዓላማ"
+            className="h-12 w-20 sm:h-14 sm:w-24 object-cover rounded shadow-sm border border-slate-300"
+          />
+          <span className="text-[10px] font-bold text-slate-700 mt-1 leading-tight">
+            የኢትዮጵያ ሰንደቅ ዓላማ
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-      {/* FULLSCREEN QR-ONLY DISPLAY OVERLAY */}
+      {/* FULLSCREEN QR-ONLY DISPLAY OVERLAY (Screen only, never printed) */}
       {fullscreenDept && (() => {
         const fsStaffUrl = `${baseUrl}?portal=staff&dept=${fullscreenDept.id}`;
         const fsVisitorUrl = `${baseUrl}?portal=visitor&dept=${fullscreenDept.id}`;
@@ -153,10 +210,8 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
 
               {/* CENTER: POLICE COMMISSION LOGO + VIBRANT MOTTO DIVIDER */}
               <div className="md:col-span-3 flex flex-col items-center justify-center text-center px-2">
-                {/* Top Vertical Luminous Divider Line */}
                 <div className="hidden md:block w-px h-14 lg:h-20 bg-gradient-to-b from-transparent via-amber-400/70 to-amber-300 mb-5" />
 
-                {/* Glowing Commission Logo */}
                 <div className="relative flex items-center justify-center mb-5">
                   <div className="absolute -inset-3 rounded-full bg-gradient-to-tr from-emerald-500/25 via-amber-400/30 to-rose-500/25 blur-xl" />
                   <div className="relative w-28 h-28 sm:w-32 sm:h-32 lg:w-40 lg:h-40 rounded-full p-1.5 bg-gradient-to-b from-amber-300 via-amber-500 to-emerald-500 shadow-2xl">
@@ -170,7 +225,6 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                   </div>
                 </div>
 
-                {/* Styled Motto directly below Logo */}
                 <div className="space-y-1.5">
                   {hasSplitMotto ? (
                     <>
@@ -187,7 +241,6 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                     </p>
                   )}
 
-                  {/* Subtle Ethiopian Flag Accent Bar under Motto */}
                   <div className="pt-2 flex items-center justify-center">
                     <div className="h-1 w-32 rounded-full overflow-hidden flex shadow-md">
                       <div className="w-1/3 h-full bg-emerald-500" />
@@ -197,7 +250,6 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                   </div>
                 </div>
 
-                {/* Bottom Vertical Luminous Divider Line */}
                 <div className="hidden md:block w-px h-14 lg:h-20 bg-gradient-to-t from-transparent via-emerald-400/70 to-emerald-300 mt-5" />
               </div>
 
@@ -244,11 +296,11 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
           <div className="flex items-center gap-2">
             <Printer className="w-6 h-6 text-amber-400" />
             <h1 className="text-xl sm:text-2xl font-black text-white font-serif">
-              የኪው አር ኮድ ስክሪን እና የግድግዳ ፖስተሮች (Wall QR Posters)
+              የኪው አር ኮድ ስክሪን እና የግድግዳ ፖስተሮች ማተሚያ (Wall QR Posters)
             </h1>
           </div>
           <p className="text-xs text-slate-300 mt-1 max-w-2xl">
-            የሰራተኛውንና የባለጉዳዩን ኪው አር ኮድ ጎን ለጎን በአንድ ስክሪን ወይም በሙሉ ስክሪን (QR ብቻ) ማሳየት እንዲሁም ለግድግዳ ፖስተር ማተም ይችላሉ።
+            በስክሪን ላይ ጎን ለጎን ወይም በሙሉ ስክሪን ማሳየት ይቻላል። ፕሪንት ሲደረግ ግን የሰራተኛው እና የባለጉዳዩ ፖስተሮች ከነአሰራር መመሪያቸው ለየብቻ በA4 ወረቀት ይታተማሉ።
           </p>
         </div>
 
@@ -268,7 +320,7 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
             className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black px-5 py-2.5 rounded-xl text-sm shadow-xl transition-all cursor-pointer whitespace-nowrap shrink-0"
           >
             <Printer className="w-4 h-4" />
-            <span>ፖስተሮችን ፕሪንት አድርግ (A4)</span>
+            <span>ለየብቻ ፕሪንት አድርግ (A4)</span>
           </button>
         </div>
       </div>
@@ -295,30 +347,30 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
 
         <div>
           <label className="block text-slate-300 font-bold mb-1">
-            የአቀማመጥ እና የፖስተር ዓይነት፡
+            የስክሪን እና የፖስተር ዕይታ፡
           </label>
           <select
             value={posterType}
             onChange={(e) => setPosterType(e.target.value as 'side_by_side' | 'both' | 'staff' | 'visitor')}
             className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none"
           >
-            <option value="side_by_side">ጎን ለጎን በአንድ ስክሪን (የሰራተኛ + ሎጎ + የባለጉዳይ)</option>
-            <option value="both">ሁለቱንም ፖስተሮች በተናጠል (Print A4)</option>
-            <option value="staff">የሰራተኞች መግቢያ እና መውጫ ብቻ</option>
-            <option value="visitor">የባለጉዳዮች መስተንግዶ እና አስተያየት ብቻ</option>
+            <option value="side_by_side">ጎን ለጎን በአንድ ስክሪን (ለስክሪን እና ሙሉ ስክሪን)</option>
+            <option value="both">ሁለቱንም ፖስተሮች ለየብቻ ከመመሪያ ጋር (Print A4)</option>
+            <option value="staff">የሰራተኞች መግቢያ እና መውጫ ብቻ (Print A4)</option>
+            <option value="visitor">የባለጉዳዮች መስተንግዶ እና አስተያየት ብቻ (Print A4)</option>
           </select>
         </div>
 
         <div className="flex flex-col justify-end">
           <div className="text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg flex items-center gap-1.5">
             <Info className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>በአንድ ስክሪን ጎን ለጎን ወይም «ሙሉ ስክሪን» ሲደረግ ሁለቱ ኪው አር ኮዶችና ሎጎው ብቻ በትልቁ ይታያሉ!</span>
+            <span>ፕሪንት ሲደረግ መሀል ሎጎው ቀርቶ የሰራተኛውና የባለጉዳዩ QR ፖስተሮች ከአሰራር መመሪያ ጋር ለየብቻ ይታተማሉ!</span>
           </div>
         </div>
       </div>
 
-      {/* Posters / Side-by-Side Display Canvas */}
-      <div className="space-y-10">
+      {/* Posters & Side-by-Side Display Canvas */}
+      <div className="space-y-10 print:space-y-0">
         {filteredDepts.map((dept) => {
           const staffPortalUrl = `${baseUrl}?portal=staff&dept=${dept.id}`;
           const visitorPortalUrl = `${baseUrl}?portal=visitor&dept=${dept.id}`;
@@ -326,11 +378,20 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
           const staffQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&margin=12&data=${encodeURIComponent(staffPortalUrl)}`;
           const visitorQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&margin=12&data=${encodeURIComponent(visitorPortalUrl)}`;
 
+          // When side_by_side is selected on screen:
+          // - On screen: show side-by-side card (with center logo + motto), hide separate print posters
+          // - When printing (print:*): HIDE side-by-side card (print:hidden), SHOW separate Staff & Visitor A4 posters (hidden print:block)!
+          const showStaffPoster =
+            posterType === 'both' || posterType === 'staff';
+          const showVisitorPoster =
+            posterType === 'both' || posterType === 'visitor';
+          const printOnlySeparatePosters = posterType === 'side_by_side';
+
           return (
-            <div key={dept.id} className="space-y-8">
-              {/* MODE A: SIDE-BY-SIDE ON ONE SCREEN (Staff QR | Police Logo + Motto | Visitor QR) */}
+            <div key={dept.id} className="space-y-8 print:space-y-0">
+              {/* MODE A: SIDE-BY-SIDE ON ONE SCREEN ONLY (Hidden completely when printing!) */}
               {posterType === 'side_by_side' && (
-                <div className="bg-slate-900 border border-slate-700/80 rounded-3xl overflow-hidden shadow-2xl break-after-page print:bg-white print:text-slate-950 print:border-2 print:border-slate-900 print:shadow-none">
+                <div className="print:hidden bg-slate-900 border border-slate-700/80 rounded-3xl overflow-hidden shadow-2xl">
                   {/* Top Ethiopian Tricolor Accent */}
                   <div className="h-2 w-full flex">
                     <div className="h-full w-1/3 bg-emerald-600" />
@@ -339,14 +400,14 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                   </div>
 
                   {/* Card Top Department Bar + Quick Fullscreen Trigger */}
-                  <div className="px-6 py-4 bg-slate-950/70 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:bg-slate-100 print:border-slate-300">
+                  <div className="px-6 py-4 bg-slate-950/70 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <Columns2 className="w-5 h-5 text-amber-400 shrink-0 print:text-slate-800" />
+                      <Columns2 className="w-5 h-5 text-amber-400 shrink-0" />
                       <div>
-                        <h2 className="text-base sm:text-lg font-black text-white font-serif print:text-slate-950">
+                        <h2 className="text-base sm:text-lg font-black text-white font-serif">
                           {dept.name}
                         </h2>
-                        <p className="text-xs text-slate-400 font-mono print:text-slate-600">
+                        <p className="text-xs text-slate-400 font-mono">
                           {settings.commissionName} • ኮድ: {dept.code}
                           {dept.roomNumber ? ` • ${dept.roomNumber}` : ''}
                         </p>
@@ -355,22 +416,22 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
 
                     <button
                       onClick={() => enterQrFullscreen(dept)}
-                      className="print:hidden flex items-center gap-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                      className="flex items-center gap-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0"
                     >
                       <Maximize2 className="w-4 h-4" />
                       <span>ይህን ክፍል በሙሉ ስክሪን ክፈት (QR ብቻ)</span>
                     </button>
                   </div>
 
-                  {/* 3-Column Side-by-Side QR Stage */}
+                  {/* 3-Column Side-by-Side QR Stage (Screen / Kiosk Display Only) */}
                   <div className="p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-11 items-center gap-6">
                     {/* LEFT: STAFF QR CODE */}
-                    <div className="lg:col-span-4 bg-slate-950/80 border border-amber-500/30 rounded-2xl p-5 flex flex-col items-center text-center print:bg-slate-50 print:border-slate-300">
-                      <div className="flex items-center gap-2 text-amber-400 font-black text-base sm:text-lg font-serif mb-1 print:text-slate-900">
+                    <div className="lg:col-span-4 bg-slate-950/80 border border-amber-500/30 rounded-2xl p-5 flex flex-col items-center text-center">
+                      <div className="flex items-center gap-2 text-amber-400 font-black text-base sm:text-lg font-serif mb-1">
                         <Shield className="w-5 h-5 shrink-0" />
                         <span>የሰራተኞች መግቢያና መውጫ</span>
                       </div>
-                      <p className="text-[11px] text-slate-400 mb-4 print:text-slate-600">
+                      <p className="text-[11px] text-slate-400 mb-4">
                         STAFF ATTENDANCE PORTAL QR
                       </p>
 
@@ -382,11 +443,11 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                         />
                       </div>
 
-                      <p className="text-xs text-slate-300 mt-3 font-medium print:text-slate-700">
+                      <p className="text-xs text-slate-300 mt-3 font-medium">
                         ሰራተኞች በስልካቸው ካሜራ ስካን በማድረግ መግቢያና መውጫ ያስመዝግቡ
                       </p>
 
-                      <div className="print:hidden mt-4 pt-3 border-t border-slate-800 w-full flex items-center justify-between gap-2 text-xs">
+                      <div className="mt-4 pt-3 border-t border-slate-800 w-full flex items-center justify-between gap-2 text-xs">
                         <button
                           onClick={() => onOpenMobilePortal && onOpenMobilePortal('staff', dept.id)}
                           className="flex items-center gap-1.5 text-amber-300 hover:text-amber-200 font-bold cursor-pointer"
@@ -413,9 +474,9 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                       <div className="hidden lg:block w-px h-10 bg-gradient-to-b from-transparent to-amber-400/60 mb-4" />
 
                       <div className="relative mb-4">
-                        <div className="absolute -inset-2 rounded-full bg-gradient-to-tr from-emerald-500/20 via-amber-400/25 to-rose-500/20 blur-lg print:hidden" />
+                        <div className="absolute -inset-2 rounded-full bg-gradient-to-tr from-emerald-500/20 via-amber-400/25 to-rose-500/20 blur-lg" />
                         <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-gradient-to-b from-amber-300 via-amber-500 to-emerald-500 shadow-xl">
-                          <div className="w-full h-full rounded-full bg-slate-950 print:bg-white flex items-center justify-center p-2">
+                          <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center p-2">
                             <img
                               src={settings.logoUrl}
                               alt="Commission Logo"
@@ -428,15 +489,15 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                       <div className="space-y-1">
                         {hasSplitMotto ? (
                           <>
-                            <p className="text-lg sm:text-xl font-black font-serif bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 bg-clip-text text-transparent print:text-amber-700 print:bg-none">
+                            <p className="text-lg sm:text-xl font-black font-serif bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 bg-clip-text text-transparent">
                               በሰብዓዊነት ማገልገል
                             </p>
-                            <p className="text-lg sm:text-xl font-black font-serif bg-gradient-to-r from-emerald-300 via-teal-200 to-cyan-300 bg-clip-text text-transparent print:text-emerald-700 print:bg-none">
+                            <p className="text-lg sm:text-xl font-black font-serif bg-gradient-to-r from-emerald-300 via-teal-200 to-cyan-300 bg-clip-text text-transparent">
                               በጀግንነት መጠበቅ
                             </p>
                           </>
                         ) : (
-                          <p className="text-lg sm:text-xl font-black font-serif bg-gradient-to-r from-amber-300 via-emerald-300 to-cyan-300 bg-clip-text text-transparent print:text-slate-900 print:bg-none">
+                          <p className="text-lg sm:text-xl font-black font-serif bg-gradient-to-r from-amber-300 via-emerald-300 to-cyan-300 bg-clip-text text-transparent">
                             {mottoRaw}
                           </p>
                         )}
@@ -452,13 +513,13 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                     </div>
 
                     {/* RIGHT: VISITOR QR CODE */}
-                    <div className="lg:col-span-4 bg-slate-950/80 border border-emerald-500/30 rounded-2xl p-5 flex flex-col items-center text-center print:bg-slate-50 print:border-slate-300">
-                      <div className="flex items-center gap-2 text-emerald-400 font-black text-base sm:text-lg font-serif mb-1 print:text-emerald-900">
+                    <div className="lg:col-span-4 bg-slate-950/80 border border-emerald-500/30 rounded-2xl p-5 flex flex-col items-center text-center">
+                      <div className="flex items-center gap-2 text-emerald-400 font-black text-base sm:text-lg font-serif mb-1">
                         <Users className="w-5 h-5 shrink-0" />
                         <span>የባለጉዳዮች መስተንግዶና አስተያየት</span>
                       </div>
-                      <p className="text-[11px] text-slate-400 mb-4 print:text-slate-600">
-                        VISITOR SERVICE & FEEDBACK QR
+                      <p className="text-[11px] text-slate-400 mb-4">
+                        VISITOR SERVICE &amp; FEEDBACK QR
                       </p>
 
                       <div className="bg-white p-3.5 rounded-2xl border-2 border-emerald-400 shadow-lg">
@@ -469,11 +530,11 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                         />
                       </div>
 
-                      <p className="text-xs text-slate-300 mt-3 font-medium print:text-slate-700">
+                      <p className="text-xs text-slate-300 mt-3 font-medium">
                         ክቡራን ባለጉዳዮች በስልክዎ ካሜራ ስካን በማድረግ ይመዝገቡና አስተያየት ይስጡ
                       </p>
 
-                      <div className="print:hidden mt-4 pt-3 border-t border-slate-800 w-full flex items-center justify-between gap-2 text-xs">
+                      <div className="mt-4 pt-3 border-t border-slate-800 w-full flex items-center justify-between gap-2 text-xs">
                         <button
                           onClick={() => onOpenMobilePortal && onOpenMobilePortal('visitor', dept.id)}
                           className="flex items-center gap-1.5 text-emerald-300 hover:text-emerald-200 font-bold cursor-pointer"
@@ -498,9 +559,13 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                 </div>
               )}
 
-              {/* POSTER 1: STAFF ATTENDANCE (የሰራተኞች መግቢያና መውጫ ፖስተር) */}
-              {(posterType === 'both' || posterType === 'staff') && (
-                <div className="bg-white text-slate-950 rounded-3xl p-8 border-4 border-slate-900 shadow-2xl max-w-3xl mx-auto break-after-page print:p-6 print:border-2 print:shadow-none print:m-0 print:w-full">
+              {/* SEPARATE PRINTABLE POSTER 1: STAFF ATTENDANCE (ለሰራተኞች ለብቻ ከመመሪያ ጋር) */}
+              {(showStaffPoster || printOnlySeparatePosters) && (
+                <div
+                  className={`${
+                    printOnlySeparatePosters ? 'hidden print:block' : ''
+                  } bg-white text-slate-950 rounded-3xl p-8 border-4 border-slate-900 shadow-2xl max-w-3xl mx-auto break-after-page print:rounded-none print:p-6 print:border-2 print:shadow-none print:m-0 print:max-w-none print:w-full`}
+                >
                   {/* Top Ethiopian Tricolor */}
                   <div className="h-2 w-full flex rounded-full overflow-hidden mb-4">
                     <div className="h-full w-1/3 bg-emerald-600"></div>
@@ -508,46 +573,13 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                     <div className="h-full w-1/3 bg-rose-600"></div>
                   </div>
 
-                  {/* Header with Logos & Commission Name */}
-                  <div className="flex items-center justify-between border-b-2 border-slate-200 pb-4 mb-4">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={settings.logoUrl}
-                        alt="Commission Logo"
-                        className="w-16 h-16 object-contain"
-                      />
-                      <div>
-                        <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-serif leading-tight">
-                          {settings.commissionName}
-                        </h2>
-                        <p className="text-xs font-bold text-slate-600 font-sans tracking-wide">
-                          BENISHANGUL GUMUZ REGION POLICE COMMISSION
-                        </p>
-                      </div>
-                    </div>
+                  {/* Formal Printable Header: Left BGR Flag | Center Logo + Amharic & English System Name | Right Ethiopia Flag */}
+                  {renderPrintableHeader()}
 
-                    <div className="flex items-center gap-2">
-                      {settings.flagUrl && (
-                        <img
-                          src={settings.flagUrl}
-                          alt="Ethiopia Flag"
-                          className="h-8 w-12 object-contain shadow-sm border border-slate-200"
-                        />
-                      )}
-                      {settings.regionalFlagUrl && (
-                        <img
-                          src={settings.regionalFlagUrl}
-                          alt="BGR Flag"
-                          className="h-8 w-12 object-contain shadow-sm border border-slate-200"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Department & Purpose Badge */}
+                  {/* Department & Purpose Title */}
                   <div className="text-center space-y-2 mb-6">
-                    <div className="inline-block px-4 py-1.5 rounded-full bg-slate-950 text-amber-400 text-xs font-extrabold uppercase tracking-wider font-mono">
-                      የሰራተኞች መግቢያ እና መውጫ ፖስተር
+                    <div className="inline-block px-4 py-1.5 rounded-full bg-slate-950 text-amber-400 text-xs font-extrabold uppercase tracking-wider">
+                      የሰራተኞች መግቢያ እና መውጫ ኪው አር ኮድ እና የአሰራር መመሪያ
                     </div>
                     <h1 className="text-2xl sm:text-3xl font-black text-slate-900 font-serif">
                       {dept.name}
@@ -563,54 +595,54 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                     </div>
                   </div>
 
-                  {/* Center QR Code and Instructions */}
+                  {/* Separate QR Code + Step-by-Step Operating Guide */}
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-8 bg-slate-50 border-2 border-slate-300 rounded-3xl p-6 mb-6">
-                    {/* QR Code Container */}
-                    <div className="flex flex-col items-center">
-                      <div className="bg-white p-3 rounded-2xl border-2 border-slate-900 shadow-md">
+                    {/* Clean QR Code (NO center overlay on the QR itself) */}
+                    <div className="flex flex-col items-center shrink-0">
+                      <div className="bg-white p-3.5 rounded-2xl border-2 border-slate-900 shadow-md">
                         <img
                           src={staffQrUrl}
                           alt="Staff Attendance QR Code"
-                          className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
+                          className="w-52 h-52 sm:w-60 sm:h-60 object-contain"
                         />
                       </div>
-                      <span className="text-[11px] font-mono font-bold text-slate-700 mt-2">
+                      <span className="text-[11px] font-mono font-bold text-slate-800 mt-2">
                         STAFF ATTENDANCE QR CODE
                       </span>
                     </div>
 
-                    {/* Step-by-Step Instructions */}
-                    <div className="space-y-3.5 max-w-xs text-left">
-                      <div className="flex items-center gap-2 text-slate-900 font-black text-sm">
+                    {/* Operating Instructions (የአሰራር መመሪያ) */}
+                    <div className="space-y-3 max-w-sm text-left">
+                      <div className="flex items-center gap-2 text-slate-950 font-black text-sm border-b border-slate-200 pb-2">
                         <Smartphone className="w-5 h-5 text-amber-600 shrink-0" />
-                        <span>በስልክዎ ስካን ሲያደርጉ የሚከተሉ ደረጃዎች፡</span>
+                        <span>የሰራተኞች የአሰራር መመሪያ (በስልክ ስካን ሲያደርጉ)፡</span>
                       </div>
 
-                      <div className="space-y-2 text-xs text-slate-700">
-                        <div className="flex items-start gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                      <div className="space-y-2 text-xs text-slate-800">
+                        <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
                           <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-black flex items-center justify-center text-[11px] shrink-0">1</span>
-                          <span>በስልክዎ ካሜራ ግድግዳው ላይ ያለውን ኪው አር ኮድ ስካን ያድርጉ</span>
+                          <span>በስልክዎ ካሜራ (ወይም QR Scanner) ግድግዳው ላይ ያለውን የሰራተኞች ኪው አር ኮድ ስካን ያድርጉ።</span>
                         </div>
-                        <div className="flex items-start gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                        <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
                           <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-black flex items-center justify-center text-[11px] shrink-0">2</span>
-                          <span>የመታወቂያ ቁጥርዎን አስገብተው ኔክስት (Next) ይበሉ</span>
+                          <span>የሚከፈተው ገጽ ላይ የፖሊስ መታወቂያ ቁጥርዎን አስገብተው <strong>«ቀጥል (Next)»</strong> የሚለውን ይጫኑ።</span>
                         </div>
-                        <div className="flex items-start gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                        <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
                           <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-black flex items-center justify-center text-[11px] shrink-0">3</span>
-                          <span>የዲጂታል መታወቂያ ካርድዎን የፊትና የኋላ ገጽ ይመልከቱ</span>
+                          <span>የራስዎን ዲጂታል መታወቂያ ካርድ ትክክለኛነት ያረጋግጡ።</span>
                         </div>
-                        <div className="flex items-start gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                        <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
                           <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-black flex items-center justify-center text-[11px] shrink-0">4</span>
-                          <span>ወደ ስራ ሲገቡ <strong>«መግቢያ»</strong>፤ ስራ ጨርሰው ሲወጡ <strong>«መውጫ»</strong> የሚለውን ይጫኑ</span>
+                          <span>ጠዋት ወደ ስራ ሲገቡ <strong>«መግቢያ (Check-In)»</strong>፣ ከሰዓት ስራ ጨርሰው ሲወጡ <strong>«መውጫ (Check-Out)»</strong> የሚለውን ይጫኑ።</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Footer Notice */}
-                  <div className="border-t border-slate-200 pt-3 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-600 font-medium">
-                    <span className="italic font-bold text-slate-800">«{settings.motto}»</span>
-                    <span className="font-mono text-slate-500">በየክፍሉ ግድግዳ ላይ የሚለጠፍ ህጋዊ ሰነድ</span>
+                  <div className="border-t border-slate-300 pt-3 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-700 font-semibold gap-2">
+                    <span className="italic font-bold text-slate-900">«በሰብዓዊነት ማገልገል በጀግንነት መጠበቅ»</span>
+                    <span className="font-mono text-slate-600">ለሰራተኞች ብቻ የሚያገለግል • በግድግዳ ላይ የሚለጠፍ</span>
                   </div>
 
                   {/* Simulator Quick Action (Non-printable) */}
@@ -625,7 +657,7 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
 
                     <button
                       onClick={() => copyToClipboard(staffPortalUrl)}
-                      className="flex items-center gap-1 text-slate-600 hover:text-slate-900 text-xs font-mono"
+                      className="flex items-center gap-1 text-slate-600 hover:text-slate-900 text-xs font-mono cursor-pointer"
                     >
                       {copiedUrl === staffPortalUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <ExternalLink className="w-3.5 h-3.5" />}
                       <span>የሊንኩን አድራሻ ኮፒ አድርግ</span>
@@ -634,9 +666,13 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                 </div>
               )}
 
-              {/* POSTER 2: VISITOR RECEPTION & FEEDBACK (የባለጉዳዮች መስተንግዶ እና አስተያየት ፖስተር) */}
-              {(posterType === 'both' || posterType === 'visitor') && (
-                <div className="bg-white text-slate-950 rounded-3xl p-8 border-4 border-emerald-950 shadow-2xl max-w-3xl mx-auto break-after-page print:p-6 print:border-2 print:shadow-none print:m-0 print:w-full">
+              {/* SEPARATE PRINTABLE POSTER 2: VISITOR RECEPTION & FEEDBACK (ለባለጉዳዮች ለብቻ ከመመሪያ ጋር) */}
+              {(showVisitorPoster || printOnlySeparatePosters) && (
+                <div
+                  className={`${
+                    printOnlySeparatePosters ? 'hidden print:block' : ''
+                  } bg-white text-slate-950 rounded-3xl p-8 border-4 border-emerald-950 shadow-2xl max-w-3xl mx-auto break-after-page print:rounded-none print:p-6 print:border-2 print:shadow-none print:m-0 print:max-w-none print:w-full`}
+                >
                   {/* Top Ethiopian Tricolor */}
                   <div className="h-2 w-full flex rounded-full overflow-hidden mb-4">
                     <div className="h-full w-1/3 bg-emerald-600"></div>
@@ -644,46 +680,13 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                     <div className="h-full w-1/3 bg-rose-600"></div>
                   </div>
 
-                  {/* Header */}
-                  <div className="flex items-center justify-between border-b-2 border-slate-200 pb-4 mb-4">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={settings.logoUrl}
-                        alt="Commission Logo"
-                        className="w-16 h-16 object-contain"
-                      />
-                      <div>
-                        <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-serif leading-tight">
-                          {settings.commissionName}
-                        </h2>
-                        <p className="text-xs font-bold text-slate-600 font-sans tracking-wide">
-                          BENISHANGUL GUMUZ REGION POLICE COMMISSION
-                        </p>
-                      </div>
-                    </div>
+                  {/* Formal Printable Header: Left BGR Flag | Center Logo + Amharic & English System Name | Right Ethiopia Flag */}
+                  {renderPrintableHeader()}
 
-                    <div className="flex items-center gap-2">
-                      {settings.flagUrl && (
-                        <img
-                          src={settings.flagUrl}
-                          alt="Ethiopia Flag"
-                          className="h-8 w-12 object-contain shadow-sm border border-slate-200"
-                        />
-                      )}
-                      {settings.regionalFlagUrl && (
-                        <img
-                          src={settings.regionalFlagUrl}
-                          alt="BGR Flag"
-                          className="h-8 w-12 object-contain shadow-sm border border-slate-200"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Department & Purpose Badge */}
+                  {/* Department & Purpose Title */}
                   <div className="text-center space-y-2 mb-6">
-                    <div className="inline-block px-4 py-1.5 rounded-full bg-emerald-950 text-emerald-300 text-xs font-extrabold uppercase tracking-wider font-mono">
-                      የባለጉዳዮች መስተንግዶ እና አስተያየት መስጫ ፖስተር
+                    <div className="inline-block px-4 py-1.5 rounded-full bg-emerald-950 text-emerald-300 text-xs font-extrabold uppercase tracking-wider">
+                      የባለጉዳዮች መስተንግዶ እና አስተያየት መስጫ ኪው አር ኮድ እና መመሪያ
                     </div>
                     <h1 className="text-2xl sm:text-3xl font-black text-slate-900 font-serif">
                       {dept.name}
@@ -699,54 +702,54 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
                     </div>
                   </div>
 
-                  {/* Center QR Code and Instructions */}
+                  {/* Separate QR Code + Step-by-Step Operating Guide */}
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-8 bg-emerald-50/50 border-2 border-emerald-300 rounded-3xl p-6 mb-6">
-                    {/* QR Code Container */}
-                    <div className="flex flex-col items-center">
-                      <div className="bg-white p-3 rounded-2xl border-2 border-emerald-900 shadow-md">
+                    {/* Clean QR Code (NO center overlay on the QR itself) */}
+                    <div className="flex flex-col items-center shrink-0">
+                      <div className="bg-white p-3.5 rounded-2xl border-2 border-emerald-900 shadow-md">
                         <img
                           src={visitorQrUrl}
                           alt="Visitor Reception QR Code"
-                          className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
+                          className="w-52 h-52 sm:w-60 sm:h-60 object-contain"
                         />
                       </div>
-                      <span className="text-[11px] font-mono font-bold text-emerald-900 mt-2">
-                        VISITOR SERVICE & FEEDBACK QR
+                      <span className="text-[11px] font-mono font-bold text-emerald-950 mt-2">
+                        VISITOR SERVICE &amp; FEEDBACK QR
                       </span>
                     </div>
 
-                    {/* Step-by-Step Instructions */}
-                    <div className="space-y-3.5 max-w-xs text-left">
-                      <div className="flex items-center gap-2 text-slate-900 font-black text-sm">
+                    {/* Operating Instructions (የአሰራር መመሪያ) */}
+                    <div className="space-y-3 max-w-sm text-left">
+                      <div className="flex items-center gap-2 text-slate-950 font-black text-sm border-b border-emerald-200 pb-2">
                         <Smartphone className="w-5 h-5 text-emerald-700 shrink-0" />
-                        <span>ክቡር ባለጉዳይ በስልክዎ ስካን ያድርጉ፡</span>
+                        <span>ክቡር ባለጉዳይ የአሰራር መመሪያ (በስልክዎ ስካን ሲያደርጉ)፡</span>
                       </div>
 
-                      <div className="space-y-2 text-xs text-slate-700">
-                        <div className="flex items-start gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                      <div className="space-y-2 text-xs text-slate-800">
+                        <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
                           <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-black flex items-center justify-center text-[11px] shrink-0">1</span>
-                          <span>በስልክዎ ካሜራ ይህንን ኪው አር ኮድ ስካን ያድርጉ</span>
+                          <span>በስልክዎ ካሜራ ይህንን የባለጉዳዮች ኪው አር ኮድ ስካን ያድርጉ።</span>
                         </div>
-                        <div className="flex items-start gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                        <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
                           <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-black flex items-center justify-center text-[11px] shrink-0">2</span>
-                          <span><strong>«አገልግሎት ፈልጌ»</strong> የሚለውን በመምረጥ ስምዎንና ስልክዎን ይሙሉ</span>
+                          <span>ወደ ክፍሉ ሲገቡ <strong>«አገልግሎት ፈልጌ»</strong> የሚለውን በመምረጥ ሙሉ ስምዎንና ስልክ ቁጥርዎን ያስገቡ።</span>
                         </div>
-                        <div className="flex items-start gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                        <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
                           <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-black flex items-center justify-center text-[11px] shrink-0">3</span>
-                          <span>የመታወቂያዎን የፊትና የኋላ ገጽ ፎቶ አንስተው ያስገቡ</span>
+                          <span>የፋይዳ ወይም የመታወቂያዎን የፊትና የኋላ ገጽ ፎቶ አንስተው ምዝገባውን ያጠናቅቁ።</span>
                         </div>
-                        <div className="flex items-start gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                        <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
                           <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-black flex items-center justify-center text-[11px] shrink-0">4</span>
-                          <span>ጉዳይዎን ሲጨርሱ <strong>«አስተያየት ለመስጠት»</strong> በሚለው ደረጃ ይስጡን</span>
+                          <span>ጉዳይዎን ፈጽመው ሲወጡ ድጋሚ ስካን በማድረግ <strong>«አስተያየት ለመስጠት»</strong> በሚለው ስልክ ቁጥርዎን አስገብተው የአገልግሎት ደረጃ ይስጡን።</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Footer Notice */}
-                  <div className="border-t border-slate-200 pt-3 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-600 font-medium">
-                    <span className="italic font-bold text-slate-800">«{settings.motto}»</span>
-                    <span className="font-mono text-emerald-800 font-bold">የህዝብ እርካታ የፖሊስ ኮሚሽኑ ቀዳሚ ግብ ነው</span>
+                  <div className="border-t border-slate-300 pt-3 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-700 font-semibold gap-2">
+                    <span className="italic font-bold text-slate-900">«በሰብዓዊነት ማገልገል በጀግንነት መጠበቅ»</span>
+                    <span className="font-mono text-emerald-900 font-bold">ለባለጉዳዮች ብቻ የሚያገለግል • የህዝብ እርካታ ቀዳሚ ግባችን ነው</span>
                   </div>
 
                   {/* Simulator Quick Action (Non-printable) */}
@@ -761,7 +764,7 @@ export const WallPostersPrintCenter: React.FC<WallPostersPrintCenterProps> = ({
 
                     <button
                       onClick={() => copyToClipboard(visitorPortalUrl)}
-                      className="flex items-center gap-1 text-slate-600 hover:text-slate-900 text-xs font-mono"
+                      className="flex items-center gap-1 text-slate-600 hover:text-slate-900 text-xs font-mono cursor-pointer"
                     >
                       {copiedUrl === visitorPortalUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <ExternalLink className="w-3.5 h-3.5" />}
                       <span>የሊንኩን አድራሻ ኮፒ አድርግ</span>
