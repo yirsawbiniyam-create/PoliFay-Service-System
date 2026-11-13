@@ -13,6 +13,7 @@ import {
   Calendar,
   Sparkles,
   Lock,
+  Presentation,
 } from 'lucide-react';
 import { CommissionSettings, Announcement } from '../types';
 import { toEthiopianTime, getFormattedDateLabels, isWorkingDay } from '../utils/ethiopianTime';
@@ -296,6 +297,18 @@ export const Header: React.FC<HeaderProps> = ({
                 {activeAnnouncements.length}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('presentation')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+              currentTab === 'presentation'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Presentation className="w-4 h-4" />
+            <span>ሰነድ እና ፓወርፖይንት (PPTX)</span>
           </button>
 
           <button

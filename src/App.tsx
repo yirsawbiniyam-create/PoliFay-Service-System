@@ -11,6 +11,7 @@ import { SettingsManager } from './components/SettingsManager';
 import { DigitalIdCards } from './components/DigitalIdCards';
 import { MediaGalleryModal } from './components/MediaGalleryModal';
 import { AdminSecurityGate } from './components/AdminSecurityGate';
+import { SystemPresentationCenter } from './components/SystemPresentationCenter';
 import {
   Department,
   Staff,
@@ -315,6 +316,11 @@ export default function App() {
         {/* Announcements */}
         {currentTab === 'announcements' && (
           <AnnouncementsManager announcements={announcements} />
+        )}
+
+        {/* System Documentation PowerPoint & Print Center */}
+        {currentTab === 'presentation' && (
+          <SystemPresentationCenter settings={settings} />
         )}
 
         {/* Commission Settings */}
